@@ -1,190 +1,216 @@
-(() => {
-  console.log('🏠 Real Estate ROI Extension: Content script loaded on', window.location.href);
-  console.log('🏠 Page title:', document.title);
-  console.log('🏠 Total elements on page:', document.querySelectorAll('*').length);
-  
-  const extractData = async () => {
-    console.log('🏠 Starting data extraction...');
-    
-    // Simple test - let's see what's actually on the page
-    const allElements = document.querySelectorAll('*');
-    console.log('🏠 Page has', allElements.length, 'elements');
-    
-    // Find elements with dollar signs
-    const dollarElements = [...allElements].filter(el => {
-      const text = el.textContent || '';
-      return /\$/.test(text) && text.length < 100;
-    });
-    console.log('🏠 Found', dollarElements.length, 'elements with dollar signs');
-    
-    // Log first 10 dollar elements for debugging
-    dollarElements.slice(0, 10).forEach((el, i) => {
-      console.log(`🏠 Dollar element ${i+1}:`, el.textContent?.trim(), el.tagName, el.className);
-    });
-    
-    // Try multiple selectors for price (Redfin and Zillow)
-    let priceEl = document.querySelector('[data-rf-test-id="abp-price"]'); // Redfin
-    console.log('🏠 Redfin price element:', priceEl);
-    
-    if (!priceEl) {
-      priceEl = document.querySelector('[data-testid="price"]'); // Zillow
-      console.log('🏠 Zillow price element (data-testid="price"):', priceEl);
-    }
-    if (!priceEl) {
-      priceEl = document.querySelector('.notranslate'); // Zillow price
-      console.log('🏠 Zillow price element (.notranslate):', priceEl);
-    }
-    
-    // Try to find the main price in a much simpler way
-    if (!priceEl) {
-      // Look for large dollar amounts that are likely the main price
-      priceEl = dollarElements.find(el => {
-        const text = el.textContent?.trim() || '';
-        const amount = text.match(/\$[\d,]+/);
-        if (amount) {
-          const numericValue = parseInt(amount[0].replace(/[^\d]/g, ''));
-          // Property prices are usually $100k+
-          return numericValue >= 100000;
-        }
-        return false;
-      });
-      console.log('🏠 Found price via large amount search:', priceEl, priceEl?.textContent);
-    }
-    
-    console.log('🏠 Final price element:', priceEl, 'Text:', priceEl?.textContent);
+// Optimized content script for property data extraction
+console.log('🏠 Real Estate ROI Extension: Content script loaded');
 
-    // Try multiple approaches for tax detection
-    console.log('🏠 Starting tax detection...');
+// Enhanced data extraction with multiple fallback strategies
+function extractPropertyData() {
+  console.log('🏠 Starting property data extraction...');
+  
+  let price = null;
+  let annualTax = null;
+  
+  // Determine which site we're on
+  const isRedfin = window.location.hostname.includes('redfin.com');
+  const isZillow = window.location.hostname.includes('zillow.com');
+  
+  console.log('🏠 Site detection:', { isRedfin, isZillow });
+  
+  if (isRedfin) {
+    // Redfin price extraction with multiple selectors
+    const redfinPriceSelectors = [
+      '.price-section .statsValue',
+      '.price .value',
+      '.current-price .price-text',
+      '.home-price',
+      '.price-display',
+      '[data-rf-test-id="abp-price"]'
+    ];
     
-    let taxText = null;
+    for (const selector of redfinPriceSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        const priceText = element.textContent || element.innerText;
+        console.log('🏠 Found price element:', selector, priceText);
+        price = extractNumericValue(priceText);
+        if (price) break;
+      }
+    }
     
-    // Method 1: Look for "Property taxes $XXX" pattern in mortgage calculators (most reliable)
-    const mortgageElements = [...document.querySelectorAll('*')].filter(el => {
-      const text = el.textContent || '';
-      return /property\s*taxes\s*\$[\d,]+/i.test(text) && text.length < 500;
-    });
+    // Redfin tax extraction
+    const redfinTaxSelectors = [
+      '[data-rf-test-id="abp-taxHistory"] .value',
+      '.tax-history .value',
+      '.property-taxes .value',
+      '.tax-amount'
+    ];
     
-    for (let el of mortgageElements) {
-      const text = el.textContent;
-      const taxMatch = text.match(/property\s*taxes\s*\$[\d,]+/i);
+    for (const selector of redfinTaxSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        const taxText = element.textContent || element.innerText;
+        console.log('🏠 Found tax element:', selector, taxText);
+        let taxValue = extractNumericValue(taxText);
+        if (taxValue) {
+          // Check if this looks like a monthly amount (typically under $1000 for most properties)
+          // Convert monthly to annual if needed
+          if (taxValue < 1200) {
+            console.log('🏠 Converting monthly tax to annual:', taxValue, '→', taxValue * 12);
+            taxValue = taxValue * 12;
+          }
+          annualTax = taxValue;
+          break;
+        }
+      }
+    }
+    
+    // Fallback: Look for tax info in body text
+    if (!annualTax) {
+      const bodyText = document.body.innerText;
+      const taxPattern = /(?:Annual|Yearly)?\s*(?:Property\s+)?Tax(?:es)?:?\s*\$?([\d,]+)/i;
+      const taxMatch = bodyText.match(taxPattern);
       if (taxMatch) {
-        const taxAmount = taxMatch[0].match(/\$[\d,]+/)[0];
-        const monthlyTax = parseInt(taxAmount.replace(/[^\d]/g, ''));
-        const annualTax = monthlyTax * 12;
-        taxText = '$' + annualTax.toLocaleString();
-        console.log('🏠 Found property taxes in mortgage calculator:', taxAmount, 'monthly, converted to annual:', taxText);
-        break;
+        console.log('🏠 Found tax in body text:', taxMatch[0]);
+        let taxValue = extractNumericValue(taxMatch[1]);
+        if (taxValue && taxValue < 1200) {
+          console.log('🏠 Converting monthly tax from body text to annual:', taxValue, '→', taxValue * 12);
+          taxValue = taxValue * 12;
+        }
+        annualTax = taxValue;
       }
     }
     
-    // Method 2: Look for tax data in tables (Redfin tax history if available)
-    if (!taxText) {
-      const taxCells = [...document.querySelectorAll('td, th')].filter(cell => {
-        const text = cell.textContent || '';
-        return /property\s*tax/i.test(text);
-      });
-      
-      for (let cell of taxCells) {
-        const row = cell.closest('tr');
-        if (row) {
-          const rowCells = [...row.querySelectorAll('td, th')];
-          
-          // Look for tax data in subsequent rows if this is a header
-          const table = row.closest('table');
-          if (table) {
-            const allRows = [...table.querySelectorAll('tr')];
-            const headerRowIndex = allRows.indexOf(row);
-            
-            for (let rowIndex = headerRowIndex + 1; rowIndex < allRows.length; rowIndex++) {
-              const dataRow = allRows[rowIndex];
-              const dataCells = [...dataRow.querySelectorAll('td, th')];
-              
-              const taxColumnIndex = rowCells.findIndex(cell => 
-                /property\s*tax/i.test(cell.textContent?.trim() || '')
-              );
-              
-              if (taxColumnIndex >= 0 && taxColumnIndex < dataCells.length) {
-                const taxCell = dataCells[taxColumnIndex];
-                const taxCellText = taxCell.textContent?.trim() || '';
-                const dollarMatch = taxCellText.match(/\$[\d,]+/);
-                if (dollarMatch) {
-                  const amount = parseInt(dollarMatch[0].replace(/[^\d]/g, ''));
-                  if (amount < 50000) {
-                    taxText = dollarMatch[0];
-                    console.log('🏠 Found tax amount in tax history table:', taxText);
-                    break;
-                  }
-                }
-              }
-            }
+  } else if (isZillow) {
+    // Zillow price extraction
+    const zillowPriceSelectors = [
+      '[data-testid="price"]',
+      '.notranslate .Text-c11n-8-84-3__sc-aiai24-0',
+      '.summary-container .notranslate',
+      '.price-range',
+      '.ds-price .ds-text'
+    ];
+    
+    for (const selector of zillowPriceSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        const priceText = element.textContent || element.innerText;
+        console.log('🏠 Found price element:', selector, priceText);
+        price = extractNumericValue(priceText);
+        if (price) break;
+      }
+    }
+    
+    // Zillow tax extraction
+    const zillowTaxSelectors = [
+      '[data-testid="property-tax-history"] .Text-c11n-8-84-3__sc-aiai24-0',
+      '.property-tax .ds-text',
+      '.tax-history .ds-text'
+    ];
+    
+    for (const selector of zillowTaxSelectors) {
+      const element = document.querySelector(selector);
+      if (element) {
+        const taxText = element.textContent || element.innerText;
+        console.log('🏠 Found tax element:', selector, taxText);
+        let taxValue = extractNumericValue(taxText);
+        if (taxValue) {
+          // Check if this looks like a monthly amount (typically under $1000 for most properties)
+          // Convert monthly to annual if needed
+          if (taxValue < 1200) {
+            console.log('🏠 Converting monthly tax to annual:', taxValue, '→', taxValue * 12);
+            taxValue = taxValue * 12;
           }
+          annualTax = taxValue;
+          break;
         }
-        if (taxText) break;
       }
     }
     
-    // Method 3: Zillow-specific selectors
-    if (!taxText && window.location.hostname.includes('zillow.com')) {
-      const zillowSelectors = [
-        '[data-testid*="tax"]',
-        '.ds-home-fact-list span',
-        '.hdp-fact-ataglance-value'
-      ];
-      
-      for (let selector of zillowSelectors) {
-        const elements = document.querySelectorAll(selector);
-        for (let el of elements) {
-          const text = el.textContent || '';
-          if (/tax/i.test(text) && /\$[\d,]+/.test(text)) {
-            const match = text.match(/\$[\d,]+/);
-            if (match) {
-              taxText = match[0];
-              console.log('🏠 Found tax via Zillow selector:', taxText);
-              break;
-            }
-          }
+    // Fallback: Look for tax info in body text
+    if (!annualTax) {
+      const bodyText = document.body.innerText;
+      const taxPattern = /(?:Annual|Property)\s+tax(?:es)?:?\s*\$?([\d,]+)/i;
+      const taxMatch = bodyText.match(taxPattern);
+      if (taxMatch) {
+        console.log('🏠 Found tax in body text:', taxMatch[0]);
+        let taxValue = extractNumericValue(taxMatch[1]);
+        if (taxValue && taxValue < 1200) {
+          console.log('🏠 Converting monthly tax from body text to annual:', taxValue, '→', taxValue * 12);
+          taxValue = taxValue * 12;
         }
-        if (taxText) break;
+        annualTax = taxValue;
       }
     }
-
-    const price = priceEl?.innerText || priceEl?.textContent ? 
-      (() => {
-        const text = priceEl.innerText || priceEl.textContent;
-        console.log('🏠 Raw price text:', text);
-        // Extract just the first dollar amount (the main price)
-        const match = text.match(/\$[\d,]+/);
-        if (match) {
-          const cleanPrice = parseInt(match[0].replace(/[^\d]/g, ''));
-          console.log('🏠 Extracted price:', cleanPrice);
-          return cleanPrice;
-        }
-        return null;
-      })() : null;
-    
-    const annualTax = taxText ? 
-      parseInt(taxText.replace(/[^\d]/g, '')) : null;
-
-    console.log('🏠 Final extraction results:', { price, annualTax });
-
-    return { price, annualTax };
-  };
-
-  // Send message only when popup asks for it
-  chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
-    console.log('Real Estate ROI Extension: Received message', req);
-    
-    if (req.type === "getListingData") {
-      extractData().then(data => {
-        console.log('Real Estate ROI Extension: Sending response', data);
-        sendResponse(data);
-      }).catch(error => {
-        console.error('Real Estate ROI Extension: Error extracting data:', error);
-        sendResponse({ price: null, annualTax: null });
-      });
-      return true; // Will respond asynchronously
-    }
-  });
+  }
   
-  console.log('Real Estate ROI Extension: Message listener registered');
-})();
+  // XPath fallback for both sites
+  if (!price) {
+    console.log('🏠 Trying XPath fallback for price...');
+    const priceXPaths = [
+      "//span[contains(text(), '$') and contains(@class, 'price')]",
+      "//div[contains(@class, 'price') and contains(text(), '$')]",
+      "//*[contains(text(), '$') and string-length(translate(text(), '$,0123456789', '')) < 5]"
+    ];
+    
+    for (const xpath of priceXPaths) {
+      try {
+        const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+        if (result.singleNodeValue) {
+          const priceText = result.singleNodeValue.textContent;
+          console.log('🏠 XPath found price:', xpath, priceText);
+          price = extractNumericValue(priceText);
+          if (price && price > 50000) break; // Reasonable house price check
+        }
+      } catch (e) {
+        console.log('🏠 XPath error:', e);
+      }
+    }
+  }
+  
+  const result = { price, annualTax };
+  console.log('🏠 Extraction result:', result);
+  
+  return result;
+}
+
+// Enhanced numeric value extraction
+function extractNumericValue(text) {
+  if (!text) return null;
+  
+  // Remove all non-digit characters except commas and periods
+  const cleanText = text.replace(/[^\d,.-]/g, '');
+  
+  // Handle cases like "1,250,000" or "1.25M"
+  if (text.includes('M') || text.includes('million')) {
+    const num = parseFloat(cleanText);
+    return Math.round(num * 1000000);
+  }
+  
+  if (text.includes('K') || text.includes('thousand')) {
+    const num = parseFloat(cleanText);
+    return Math.round(num * 1000);
+  }
+  
+  // Regular number with commas
+  const num = parseFloat(cleanText.replace(/,/g, ''));
+  return isNaN(num) ? null : Math.round(num);
+}
+
+// Message listener for popup communication
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('🏠 Received message:', request);
+  
+  if (request.type === "getListingData") {
+    try {
+      const data = extractPropertyData();
+      console.log('🏠 Sending data to popup:', data);
+      sendResponse(data);
+    } catch (error) {
+      console.error('🏠 Error extracting data:', error);
+      sendResponse({ error: error.message });
+    }
+  }
+  
+  return true; // Keep message channel open for async response
+});
+
+// Initialize extraction when script loads
+console.log('🏠 Content script ready on:', window.location.href);
