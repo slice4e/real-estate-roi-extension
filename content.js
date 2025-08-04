@@ -144,12 +144,15 @@ function extractPropertyData() {
                 if (taxMatch && taxMatch.length > 0) {
                   // Get the first tax amount (property taxes column)
                   const taxAmount = extractNumericValue(taxMatch[0]);
-                  if (taxAmount && taxAmount > 500) {
+                  // Add validation: tax amounts should be reasonable (not listing prices)
+                  if (taxAmount && taxAmount > 500 && taxAmount < 30000) {
                     console.log(`🏠 Found tax for year ${year}: $${taxAmount}`);
                     if (year > mostRecentYear) {
                       mostRecentYear = year;
                       mostRecentTax = taxAmount;
                     }
+                  } else if (taxAmount) {
+                    console.log(`🏠 Rejecting unreasonable tax amount for ${year}: $${taxAmount} (likely not a tax)`);
                   }
                 }
               }
@@ -232,11 +235,7 @@ function extractPropertyData() {
         
         // General tax selectors
         '.tax-history-container .Text-c11n-8-84-3__sc-aiai24-0',
-        '.property-tax-container .Text-c11n-8-84-3__sc-aiai24-0',
-        
-        // Broad span searches for tax amounts
-        'span[class*="Text"]:has-text("$")',
-        'div[class*="Text"]:has-text("$")'
+        '.property-tax-container .Text-c11n-8-84-3__sc-aiai24-0'
       ];
       
       for (const selector of enhancedZillowSelectors) {
@@ -392,8 +391,11 @@ function extractPropertyData() {
       }
     }
 
-    // Try tax table extraction first
-    annualTax = tryExtractFromTaxTable();
+    // Try tax table extraction only if other methods failed
+    if (!annualTax) {
+      console.log('🏠 Fallback: Trying tax table extraction...');
+      annualTax = tryExtractFromTaxTable();
+    }
     
     // Method 2: Look for tax history section specifically with enhanced selectors
     if (!annualTax) {
