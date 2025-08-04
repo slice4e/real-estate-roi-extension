@@ -20,6 +20,14 @@ const SELECTORS = {
       '.tax-history .value',
       '.property-taxes .value',
       '.tax-amount'
+    ],
+    insurance: [
+      '[data-rf-test-id*="insurance" i] .value',
+      '.insurance .value',
+      '.home-insurance .value',
+      '.property-insurance .value',
+      '.hazard-insurance .value',
+      '[class*="insurance"] .value'
     ]
   },
   zillow: {
@@ -40,6 +48,15 @@ const SELECTORS = {
       '[data-testid*="tax" i] span',
       '.tax-history-container .Text-c11n-8-84-3__sc-aiai24-0',
       '.property-tax-container .Text-c11n-8-84-3__sc-aiai24-0'
+    ],
+    insurance: [
+      '[data-testid*="insurance" i] span',
+      '[data-testid="property-details"] [class*="insurance"] span',
+      '[data-testid="home-details"] [class*="insurance"] span',
+      '[data-testid="facts-and-features"] [class*="insurance"] span',
+      '.insurance-container .Text-c11n-8-84-3__sc-aiai24-0',
+      '.home-insurance-container .Text-c11n-8-84-3__sc-aiai24-0',
+      '[class*="insurance"] .Text-c11n-8-84-3__sc-aiai24-0'
     ]
   }
 };
@@ -52,7 +69,18 @@ const TAX_PATTERNS = [
   /Property\s+tax\s*\(?\d{4}\)?\s*:?\s*\$([0-9,]+)(?!\s*\/\s*mo)/i
 ];
 
+const INSURANCE_PATTERNS = [
+  /Home(?:owners?)?[\s\-]*insurance\s*:?\s*\$([0-9,]+)/i,
+  /Property\s+insurance\s*:?\s*\$([0-9,]+)/i,
+  /Hazard\s+insurance\s*:?\s*\$([0-9,]+)/i,
+  /Insurance\s*\(\d{4}\)\s*:?\s*\$([0-9,]+)/i,
+  /Annual\s+insurance\s*:?\s*\$([0-9,]+)/i,
+  /Monthly\s+insurance\s*:?\s*\$([0-9,]+)/i,
+  /Insurance\s+cost\s*:?\s*\$([0-9,]+)/i
+];
+
 const TAX_KEYWORDS = ['tax', 'property tax', 'annual tax', 'county tax', 'assessment', 'levy'];
+const INSURANCE_KEYWORDS = ['insurance', 'homeowners insurance', 'home insurance', 'property insurance', 'hazard insurance', 'coverage'];
 const PAYMENT_KEYWORDS = ['monthly', 'payment', 'mortgage', 'principal', 'interest', 'pmi', 'insurance'];
 
 // =====================================================
@@ -94,6 +122,15 @@ function convertToAnnualTax(taxValue) {
     return taxValue * 12;
   }
   return taxValue;
+}
+
+function convertToAnnualInsurance(insuranceValue, text) {
+  // Check if the text indicates monthly insurance
+  if (/month|mo\b|\/mo\b|monthly/i.test(text) || insuranceValue < 500) {
+    console.log('🏠 Converting monthly insurance to annual:', insuranceValue, '→', insuranceValue * 12);
+    return insuranceValue * 12;
+  }
+  return insuranceValue;
 }
 
 function getSafeText(element) {
@@ -166,6 +203,32 @@ class PropertyDataExtractor {
     return null;
   }
 
+  // Extract insurance using selectors
+  extractInsuranceFromSelectors() {
+    console.log('🏠 Extracting insurance from selectors...');
+    
+    for (const selector of this.selectors.insurance) {
+      try {
+        const element = document.querySelector(selector);
+        if (element) {
+          const insuranceText = getSafeText(element);
+          console.log('🏠 Found insurance element:', selector, insuranceText);
+          const insuranceValue = extractNumericValue(insuranceText);
+          if (insuranceValue && insuranceValue > 0) {
+            // Convert monthly to annual if needed
+            const annualInsurance = convertToAnnualInsurance(insuranceValue, insuranceText);
+            console.log('🏠 ✅ Insurance from selector:', annualInsurance);
+            return annualInsurance;
+          }
+        }
+      } catch (e) {
+        console.log('🏠 Insurance selector error:', selector, e.message);
+      }
+    }
+    
+    return null;
+  }
+
   // Smart search for tax amounts with context validation
   extractTaxFromContext() {
     console.log('🏠 Smart tax search with context validation...');
@@ -220,6 +283,60 @@ class PropertyDataExtractor {
     return null;
   }
 
+  // Smart search for insurance amounts with context validation
+  extractInsuranceFromContext() {
+    console.log('🏠 Smart insurance search with context validation...');
+    
+    const allElements = document.querySelectorAll('*');
+    const potentialInsuranceElements = [];
+    
+    for (const element of allElements) {
+      const text = getSafeText(element);
+      
+      // Skip elements with children (avoid duplicates) or very long text
+      if (element.children.length > 0 || text.length > 100) continue;
+      
+      // Look for dollar amounts that could be insurance
+      if (text.includes('$')) {
+        const amount = extractNumericValue(text);
+        if (amount && amount >= 50 && amount <= 15000) {
+          
+          // Check context for insurance-related keywords
+          const parentText = getSafeText(element.parentElement).toLowerCase();
+          const contextText = parentText.substring(0, 200);
+          
+          const hasKeyword = INSURANCE_KEYWORDS.some(keyword => contextText.includes(keyword));
+          const isPaymentContext = PAYMENT_KEYWORDS.some(keyword => contextText.includes(keyword));
+          
+          if (hasKeyword && !isPaymentContext) {
+            potentialInsuranceElements.push({
+              amount,
+              context: contextText.substring(0, 100),
+              text: text,
+              priority: amount > 1000 ? 1 : 0 // Prioritize annual amounts
+            });
+            console.log('🏠 Found potential insurance:', amount, 'Context:', contextText.substring(0, 60));
+          }
+        }
+      }
+    }
+    
+    // Sort by priority (annual first), then by amount
+    potentialInsuranceElements.sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      return b.amount - a.amount;
+    });
+    
+    if (potentialInsuranceElements.length > 0) {
+      const best = potentialInsuranceElements[0];
+      const annualInsurance = convertToAnnualInsurance(best.amount, best.text);
+      console.log('🏠 ✅ Insurance from context search:', annualInsurance, 'Source:', best.text);
+      return annualInsurance;
+    }
+    
+    return null;
+  }
+
   // Extract tax using text patterns
   extractTaxFromPatterns() {
     console.log('🏠 Extracting tax from text patterns...');
@@ -243,6 +360,38 @@ class PropertyDataExtractor {
             const annualTax = convertToAnnualTax(taxValue);
             console.log('🏠 ✅ Tax from pattern:', match[0], '→', annualTax);
             return annualTax;
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  // Extract insurance using text patterns
+  extractInsuranceFromPatterns() {
+    console.log('🏠 Extracting insurance from text patterns...');
+    
+    const searchAreas = [
+      document.querySelector('[data-testid="property-details"]'),
+      document.querySelector('[data-testid="home-details"]'),
+      document.querySelector('.summary-container'),
+      document.querySelector('[data-testid="facts-and-features"]'),
+      document.querySelector('[data-testid="mortgage-calculator"]'),
+      document.body
+    ].filter(Boolean);
+    
+    for (const area of searchAreas) {
+      const areaText = getSafeText(area);
+      
+      for (const pattern of INSURANCE_PATTERNS) {
+        const match = areaText.match(pattern);
+        if (match) {
+          const insuranceValue = extractNumericValue(match[1]);
+          if (insuranceValue && insuranceValue >= 50) {
+            const annualInsurance = convertToAnnualInsurance(insuranceValue, match[0]);
+            console.log('🏠 ✅ Insurance from pattern:', match[0], '→', annualInsurance);
+            return annualInsurance;
           }
         }
       }
@@ -308,6 +457,7 @@ class PropertyDataExtractor {
     
     let price = this.extractPrice();
     let annualTax = null;
+    let annualInsurance = null;
     
     // Try tax extraction methods in order of reliability
     const taxMethods = [
@@ -325,6 +475,22 @@ class PropertyDataExtractor {
         console.log('🏠 Tax extraction method failed:', error.message);
       }
     }
+
+    // Try insurance extraction methods in order of reliability
+    const insuranceMethods = [
+      () => this.extractInsuranceFromSelectors(),
+      () => this.extractInsuranceFromContext(),
+      () => this.extractInsuranceFromPatterns()
+    ];
+    
+    for (const method of insuranceMethods) {
+      try {
+        annualInsurance = method();
+        if (annualInsurance) break;
+      } catch (error) {
+        console.log('🏠 Insurance extraction method failed:', error.message);
+      }
+    }
     
     // Final validation
     if (annualTax && !isValidTaxAmount(annualTax, true)) {
@@ -334,8 +500,19 @@ class PropertyDataExtractor {
         annualTax = null;
       }
     }
+
+    // Validate insurance amount
+    if (annualInsurance) {
+      if (annualInsurance < 200 || annualInsurance > 15000) {
+        console.log('🏠 ⚠️ Warning: Extracted insurance amount seems unusual:', annualInsurance);
+        if (annualInsurance > 15000) {
+          console.log('🏠 ❌ Insurance amount too high, likely extracted wrong value.');
+          annualInsurance = null;
+        }
+      }
+    }
     
-    const result = { price, annualTax };
+    const result = { price, annualTax, annualInsurance };
     console.log('🏠 Final extraction result:', result);
     
     return result;
@@ -355,6 +532,7 @@ function extractPropertyData() {
     return { 
       price: null, 
       annualTax: null, 
+      annualInsurance: null,
       error: 'Extraction failed: ' + error.message 
     };
   }

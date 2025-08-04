@@ -226,7 +226,16 @@ class FormDefaults {
     // Set strategy-specific defaults
     Object.entries(defaults).forEach(([key, value]) => {
       if (['rent', 'improvements', 'renovationPeriod'].includes(key)) return;
-      if (FIELD_IDS[key]) {
+      
+      // Use extracted insurance value if available
+      if (key === 'insurance' && appState.data && appState.data.annualInsurance) {
+        const monthlyInsurance = Math.round(appState.data.annualInsurance / 12);
+        Utils.setElementValue(FIELD_IDS[key], monthlyInsurance);
+        Utils.logCalculation('Using extracted insurance', { 
+          annual: appState.data.annualInsurance, 
+          monthly: monthlyInsurance 
+        });
+      } else if (FIELD_IDS[key]) {
         Utils.setElementValue(FIELD_IDS[key], value);
       }
     });
@@ -1211,6 +1220,18 @@ class EventHandlers {
     if (!data.annualTax) {
       const estimatedTax = Math.round(data.price * CONFIG.thresholds.estimatedTaxRate);
       data.annualTax = estimatedTax;
+    }
+
+    // Handle missing insurance data
+    if (!data.annualInsurance) {
+      // Use default values if no insurance found
+      data.annualInsurance = CONFIG.defaults.conventional.insurance * 12; // Convert monthly to annual
+      Utils.logCalculation('Using default insurance value', { 
+        defaultMonthly: CONFIG.defaults.conventional.insurance,
+        annualInsurance: data.annualInsurance 
+      });
+    } else {
+      Utils.logCalculation('Using extracted insurance value', { annualInsurance: data.annualInsurance });
     }
     
     // Set up the application state
