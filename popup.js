@@ -493,7 +493,7 @@ function formatResults(calculation, isHeloc) {
       
       <strong>REFINANCE RECOVERY:</strong><br>
       - ARV (After Repair Value): $${calculation.arv.toLocaleString()}<br>
-      - Renovation Period: ${renovationPeriod} months ${hasTimeConstraint ? '(<6 months)' : '(≥6 months)'}<br>
+      - Renovation Period: ${renovationPeriod} months ${hasTimeConstraint ? '(under 6 months)' : '(6+ months)'}<br>
       - Standard Refinance Limit: 70% of ARV = $${Math.round(calculation.arv * 0.7).toLocaleString()}<br>
       ${hasTimeConstraint ? `- Time Constraint: Cannot exceed purchase price = $${calculation.purchasePrice.toLocaleString()}<br>` : ''}
       - Actual Refinance Loan Amount: $${Math.round(calculation.refinanceLoanAmount).toLocaleString()}<br>
