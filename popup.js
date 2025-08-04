@@ -348,10 +348,10 @@ function calculateHelocROI(askingPrice, annualTax, params) {
   const mortgagePayment = (refinanceLoanAmount * monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / 
                          (Math.pow(1 + monthlyRate, numPayments) - 1);
   
-  // Monthly breakdown (with additional financing)
+  // Monthly breakdown (after refinance - HELOC is paid off)
   const monthlyTax = annualTax / 12;
   const monthlyCashFlowWithHeloc = params.rent - mortgagePayment - monthlyTax - 
-                                  params.insurance - params.otherMisc - helocMonthlyPayment;
+                                  params.insurance - params.otherMisc;
   
   const annualCashFlow = monthlyCashFlowWithHeloc * 12;
   const roi = (annualCashFlow / finalCashIn) * 100;
@@ -443,14 +443,16 @@ function formatResults(calculation, isHeloc) {
                 - Other: $${calculation.details.other}`;
     
   if (isHeloc) {
-    html += `<br>                - HELOC: $${Math.round(calculation.helocPayment)}
-              </div>
+    html += `</div>
             </div>
             
             <div class="cash-flow-net ${calculation.monthlyCashFlowWithHeloc >= 0 ? 'cash-flow-positive' : 'cash-flow-negative'}">
-              <div style="font-weight: bold;">= Net Cash Flow:</div>
+              <div style="font-weight: bold;">= Net Cash Flow (post-refinance):</div>
               <div style="font-size: 16px; font-weight: bold; color: ${calculation.monthlyCashFlowWithHeloc >= 0 ? '#2e7d32' : '#d32f2f'};">
                 $${Math.round(calculation.monthlyCashFlowWithHeloc)} per month
+              </div>
+              <div style="font-size: 10px; color: #666; margin-top: 2px;">
+                (HELOC paid off at refinance)
               </div>
             </div>
           </div>
@@ -469,8 +471,8 @@ function formatResults(calculation, isHeloc) {
       - Purchase Price: $${calculation.purchasePrice.toLocaleString()}<br>
       - Closing Costs: $1,000<br>
       - Improvements: $${(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts).toLocaleString()}<br>
-      - HELOC Payments (${Math.round((calculation.holdingCosts / calculation.helocPayment))} months): $${calculation.holdingCosts.toLocaleString()}<br>
-      <small style="color: #666;">  * Includes renovation + 1 month for refinancing</small><br>
+      - HELOC Payments (holding period only - ${Math.round((calculation.holdingCosts / calculation.helocPayment))} months): $${calculation.holdingCosts.toLocaleString()}<br>
+      <small style="color: #666;">  * HELOC paid off at refinance completion</small><br>
       <strong>= Total Cash In: $${calculation.totalCashIn.toLocaleString()}</strong><br><br>
       
       <strong>REFINANCE RECOVERY:</strong><br>
@@ -487,7 +489,7 @@ function formatResults(calculation, isHeloc) {
       <strong>= Final Cash In: $${calculation.finalCashIn.toLocaleString()}</strong><br><br>
       
       <strong>ROI CALCULATION:</strong><br>
-      - Monthly Net Cash Flow: $${Math.round(calculation.monthlyCashFlowWithHeloc)}<br>
+      - Monthly Net Cash Flow (post-refinance): $${Math.round(calculation.monthlyCashFlowWithHeloc)}<br>
       - Annual Cash Flow: $${Math.round(calculation.annualCashFlow).toLocaleString()}<br>
       - Final Cash In: $${calculation.finalCashIn.toLocaleString()}<br>
       <strong>= ROI: $${Math.round(calculation.annualCashFlow).toLocaleString()} / $${calculation.finalCashIn.toLocaleString()} = ${calculation.roi.toFixed(1)}%</strong>`;
