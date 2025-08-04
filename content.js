@@ -208,22 +208,35 @@ function extractPropertyData() {
     if (!annualTax) {
       console.log('🏠 Trying enhanced Zillow tax selectors...');
       const enhancedZillowSelectors = [
-        // Modern Zillow tax history selectors
+        // Modern Zillow tax history selectors - most recent formats
+        '[data-testid="property-tax-history"] span',
         '[data-testid="property-tax-history"] .Text-c11n-8-84-3__sc-aiai24-0',
         '[data-testid="tax-assessments"] .Text-c11n-8-84-3__sc-aiai24-0',
         '.PropertyTaxes-c11n-8-84-3__sc-1l1c55w-0 .Text-c11n-8-84-3__sc-aiai24-0',
         
+        // Property details and overview sections - common locations
+        '[data-testid="property-details"] [class*="tax"] span',
+        '[data-testid="home-details"] [class*="tax"] span',
+        '.summary-container [class*="tax"] span',
+        '.home-summary [class*="tax"] span',
+        
+        // Facts and features sections
+        '.fact-container [class*="tax"] span',
+        '.property-facts [class*="tax"] span',
+        '[data-testid="facts-and-features"] [class*="tax"] span',
+        
         // Tax fact section
         '[aria-label*="tax" i] .Text-c11n-8-84-3__sc-aiai24-0',
         '[data-testid*="tax" i] .Text-c11n-8-84-3__sc-aiai24-0',
+        '[data-testid*="tax" i] span',
         
-        // Property details tax rows
-        'dt:contains("Tax") + dd',
-        '.fact-row:contains("Tax") .fact-value',
-        
-        // Tax history in tables - more specific
+        // General tax selectors
         '.tax-history-container .Text-c11n-8-84-3__sc-aiai24-0',
-        '.property-tax-container .Text-c11n-8-84-3__sc-aiai24-0'
+        '.property-tax-container .Text-c11n-8-84-3__sc-aiai24-0',
+        
+        // Broad span searches for tax amounts
+        'span[class*="Text"]:has-text("$")',
+        'div[class*="Text"]:has-text("$")'
       ];
       
       for (const selector of enhancedZillowSelectors) {
@@ -251,6 +264,134 @@ function extractPropertyData() {
       }
     }
     
+    // Method 1.6: Aggressive search for any visible tax amounts
+    if (!annualTax) {
+      console.log('🏠 Method 1.6: Aggressive tax amount search...');
+      
+      // Search for all elements containing dollar amounts
+      const allElements = document.querySelectorAll('*');
+      const potentialTaxElements = [];
+      
+      for (const element of allElements) {
+        const text = (element.textContent || '').trim();
+        const directText = (element.innerText || '').trim();
+        
+        // Skip if element has children with text (to avoid duplicates)
+        if (element.children.length > 0 && element.children[0].textContent) continue;
+        
+        // Look for dollar amounts that could be taxes
+        if ((text.includes('$') || directText.includes('$')) && 
+            (text.length < 50 && directText.length < 50)) { // Keep text short to avoid paragraphs
+          
+          const amount = extractNumericValue(text) || extractNumericValue(directText);
+          if (amount && amount >= 500 && amount <= 50000) {
+            
+            // Check if the context suggests this is a tax amount
+            const parentText = (element.parentElement?.textContent || '').toLowerCase();
+            const siblingTexts = Array.from(element.parentElement?.children || [])
+              .map(el => (el.textContent || '').toLowerCase()).join(' ');
+            
+            const contextText = (parentText + ' ' + siblingTexts).toLowerCase();
+            
+            // Look for tax-related keywords in context
+            const taxKeywords = ['tax', 'property tax', 'annual tax', 'county tax', 'assessment', 'levy'];
+            const hasKeyword = taxKeywords.some(keyword => contextText.includes(keyword));
+            
+            // Exclude payment/mortgage contexts
+            const paymentKeywords = ['monthly', 'payment', 'mortgage', 'principal', 'interest', 'pmi', 'insurance'];
+            const isPaymentContext = paymentKeywords.some(keyword => contextText.includes(keyword));
+            
+            if (hasKeyword && !isPaymentContext) {
+              potentialTaxElements.push({
+                element,
+                amount,
+                context: contextText.substring(0, 100),
+                text: text
+              });
+              console.log('🏠 Found potential tax amount:', amount, 'Context:', contextText.substring(0, 100));
+            }
+          }
+        }
+      }
+      
+      // Sort by most likely to be annual tax (amounts > 1200 first, then by amount)
+      potentialTaxElements.sort((a, b) => {
+        const aIsAnnual = a.amount > 1200 ? 1 : 0;
+        const bIsAnnual = b.amount > 1200 ? 1 : 0;
+        if (aIsAnnual !== bIsAnnual) return bIsAnnual - aIsAnnual;
+        return b.amount - a.amount; // Higher amounts first within same category
+      });
+      
+      if (potentialTaxElements.length > 0) {
+        const best = potentialTaxElements[0];
+        let taxValue = best.amount;
+        
+        // Convert to annual if it looks monthly
+        if (taxValue < 1200) {
+          console.log('🏠 Converting likely monthly tax to annual:', taxValue, '→', taxValue * 12);
+          taxValue = taxValue * 12;
+        }
+        
+        annualTax = taxValue;
+        console.log('🏠 ✅ Tax from aggressive search:', annualTax, 'Source:', best.text);
+      }
+    }
+
+    // Method 1.7: Look for current Zillow tax display patterns
+    if (!annualTax) {
+      console.log('🏠 Method 1.7: Current Zillow tax patterns...');
+      
+      // Common current Zillow tax display formats
+      const currentPatterns = [
+        // Look for "Property taxes: $5,556" or similar
+        /Property\s+taxes?\s*:?\s*\$([0-9,]+)/i,
+        // Look for "Annual tax: $5,556" 
+        /Annual\s+tax(?:es)?\s*:?\s*\$([0-9,]+)/i,
+        // Look for "Tax (2024): $5,556"
+        /Tax\s*\(\d{4}\)\s*:?\s*\$([0-9,]+)/i,
+        // Look for standalone tax amounts near "tax" text
+        /\$([0-9,]+)(?=.*tax|tax.*)/i,
+        // Look for tax assessment patterns
+        /(?:Tax\s+)?Assessment\s*:?\s*\$([0-9,]+)/i
+      ];
+      
+      // Search in the most common locations first
+      const searchAreas = [
+        document.querySelector('[data-testid="property-details"]'),
+        document.querySelector('[data-testid="home-details"]'), 
+        document.querySelector('.summary-container'),
+        document.querySelector('.home-summary'),
+        document.querySelector('[data-testid="facts-and-features"]'),
+        document.body // fallback to entire page
+      ].filter(Boolean);
+      
+      for (const area of searchAreas) {
+        const areaText = (area.textContent || area.innerText || '');
+        console.log('🏠 Searching area for tax patterns:', area.tagName || 'BODY', areaText.substring(0, 200));
+        
+        for (const pattern of currentPatterns) {
+          const match = areaText.match(pattern);
+          if (match) {
+            const taxValue = extractNumericValue(match[1]);
+            if (taxValue && taxValue >= 500) {
+              let finalValue = taxValue;
+              
+              // Convert to annual if needed
+              if (finalValue < 1200) {
+                console.log('🏠 Converting monthly tax to annual:', finalValue, '→', finalValue * 12);
+                finalValue = finalValue * 12;
+              }
+              
+              annualTax = finalValue;
+              console.log('🏠 ✅ Tax from current pattern:', match[0], '→', annualTax);
+              break;
+            }
+          }
+        }
+        if (annualTax) break;
+      }
+    }
+
     // Try tax table extraction first
     annualTax = tryExtractFromTaxTable();
     
