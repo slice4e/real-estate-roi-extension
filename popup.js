@@ -926,7 +926,7 @@ class UIManager {
     }
     
     // Add insurance information
-    if (data.annualInsurance && data.annualInsurance > CONFIG.defaults.conventional.insurance * 12) {
+    if (data.annualInsurance && data.annualInsurance > 0 && data.annualInsurance !== (CONFIG.defaults.conventional.insurance * 12)) {
       const monthlyInsurance = Math.round(data.annualInsurance / 12);
       html += `<strong>Annual Insurance:</strong> $${Utils.formatCurrency(data.annualInsurance)} (~$${monthlyInsurance}/month - extracted)`;
     } else {
@@ -1242,7 +1242,7 @@ class EventHandlers {
     }
 
     // Handle missing insurance data
-    if (!data.annualInsurance) {
+    if (!data.annualInsurance || data.annualInsurance <= 0) {
       // Use default values if no insurance found
       data.annualInsurance = CONFIG.defaults.conventional.insurance * 12; // Convert monthly to annual
       Utils.logCalculation('Using default insurance value', { 
@@ -1250,7 +1250,10 @@ class EventHandlers {
         annualInsurance: data.annualInsurance 
       });
     } else {
-      Utils.logCalculation('Using extracted insurance value', { annualInsurance: data.annualInsurance });
+      Utils.logCalculation('Using extracted insurance value', { 
+        extracted: data.annualInsurance,
+        monthly: Math.round(data.annualInsurance / 12)
+      });
     }
     
     // Set up the application state
