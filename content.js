@@ -89,22 +89,35 @@ const SELECTORS = {
 };
 
 const TAX_PATTERNS = [
+  // Specific patterns for payment calculator format
+  /Property\s+taxes\s*[\r\n]+\s*\$([0-9,]+)/i,
+  /Property\s+taxes\s*\$([0-9,]+)/i,
+  
+  // Original patterns with more precise matching
   /Annual\s+tax(?:es|[\s]*amount)?\s*:?\s*\$([0-9,]+)/i,
   /Property\s+tax(?:es)?\s*:?\s*\$([0-9,]+)/i,
   /Tax\s*\(\d{4}\)\s*:?\s*\$([0-9,]+)/i,
   /(?:Tax\s+)?Assessment\s*:?\s*\$([0-9,]+)/i,
   /Property\s+tax\s*\(?\d{4}\)?\s*:?\s*\$([0-9,]+)(?!\s*\/\s*mo)/i,
-  // Enhanced patterns for more flexibility
-  /Property\s+taxes\s*\$([0-9,]+)/i,
+  
+  // Enhanced patterns for more flexibility  
   /Tax(?:es)?\s*amount\s*\$([0-9,]+)/i,
   /Annual\s*property\s*tax\s*\$([0-9,]+)/i,
   /County\s*tax(?:es)?\s*\$([0-9,]+)/i,
   /Real\s*estate\s*tax(?:es)?\s*\$([0-9,]+)/i,
-  /\$([0-9,]+)\s*(?:annual\s*)?(?:property\s*)?tax(?:es)?/i,
-  /tax(?:es)?\s*[:]*\s*\$([0-9,]+)(?!\s*\/\s*mo)/i
+  
+  // More precise patterns that don't cross lines unexpectedly
+  /tax(?:es)?\s*[:]*\s*\$([0-9,]+)(?!\s*\/\s*mo)(?!\s*per)/i
 ];
 
 const INSURANCE_PATTERNS = [
+  // Specific patterns for payment calculator format
+  /Homeowners\s+insurance\s*[\r\n]+\s*\$([0-9,]+)/i,
+  /Home\s+insurance\s*[\r\n]+\s*\$([0-9,]+)/i,
+  /Homeowners\s+insurance\s*\$([0-9,]+)/i,
+  /Home\s+insurance\s*\$([0-9,]+)/i,
+  
+  // Original patterns
   /Home(?:owners?)?[\s\-]*insurance\s*:?\s*\$([0-9,]+)/i,
   /Property\s+insurance\s*:?\s*\$([0-9,]+)/i,
   /Hazard\s+insurance\s*:?\s*\$([0-9,]+)/i,
@@ -112,12 +125,12 @@ const INSURANCE_PATTERNS = [
   /Annual\s+insurance\s*:?\s*\$([0-9,]+)/i,
   /Monthly\s+insurance\s*:?\s*\$([0-9,]+)/i,
   /Insurance\s+cost\s*:?\s*\$([0-9,]+)/i,
+  
   // Enhanced patterns for more flexibility
-  /Home\s*insurance\s*\$([0-9,]+)/i,
   /Property\s*insurance\s*\$([0-9,]+)/i,
   /Insurance\s*amount\s*\$([0-9,]+)/i,
-  /Homeowners\s*insurance\s*\$([0-9,]+)/i,
-  /\$([0-9,]+)\s*(?:home|homeowners?|property)\s*insurance/i,
+  
+  // More precise patterns
   /insurance\s*[:]*\s*\$([0-9,]+)/i
 ];
 
@@ -158,11 +171,35 @@ function isValidTaxAmount(amount, isAnnual = true) {
   }
 }
 
-function convertToAnnualTax(taxValue) {
-  if (taxValue < 1200) {
-    console.log('🏠 Converting monthly tax to annual:', taxValue, '→', taxValue * 12);
-    return taxValue * 12;
+function convertToAnnualTax(taxValue, context = '', propertyPrice = null) {
+  // Enhanced logic to detect monthly taxes
+  const isMonthlyByValue = taxValue < 1500; // Increased threshold
+  const isMonthlyByContext = /month|mo\b|\/mo\b|monthly/i.test(context);
+  
+  // If we have property price, use it to validate tax rate
+  if (propertyPrice && taxValue > 0) {
+    const taxRate = taxValue / propertyPrice;
+    const isUnrealisticAnnualRate = taxRate < 0.008; // Less than 0.8% annually is suspicious
+    
+    console.log('🏠 Tax rate analysis:', {
+      taxValue,
+      propertyPrice,
+      taxRate: (taxRate * 100).toFixed(2) + '%',
+      isUnrealistic: isUnrealisticAnnualRate
+    });
+    
+    if (isUnrealisticAnnualRate || isMonthlyByValue || isMonthlyByContext) {
+      console.log('🏠 Converting monthly tax to annual:', taxValue, '→', taxValue * 12);
+      return taxValue * 12;
+    }
+  } else {
+    // Fallback to original logic if no property price
+    if (isMonthlyByValue || isMonthlyByContext) {
+      console.log('🏠 Converting monthly tax to annual:', taxValue, '→', taxValue * 12);
+      return taxValue * 12;
+    }
   }
+  
   return taxValue;
 }
 
@@ -383,6 +420,13 @@ class PropertyDataExtractor {
   extractTaxFromPatterns() {
     console.log('🏠 Extracting tax from text patterns...');
     
+    // First try payment calculator extraction
+    const paymentCalcResult = this.extractFromPaymentCalculator();
+    if (paymentCalcResult.tax) {
+      console.log('🏠 ✅ Tax from payment calculator:', paymentCalcResult.tax);
+      return paymentCalcResult.tax;
+    }
+    
     const searchAreas = [
       document.querySelector('[data-testid="property-details"]'),
       document.querySelector('[data-testid="home-details"]'),
@@ -398,7 +442,7 @@ class PropertyDataExtractor {
         const match = areaText.match(pattern);
         if (match) {
           const taxValue = extractNumericValue(match[1]);
-          if (taxValue && taxValue >= 500) {
+          if (taxValue && taxValue >= 50) { // Lowered threshold to catch monthly amounts
             const annualTax = convertToAnnualTax(taxValue);
             console.log('🏠 ✅ Tax from pattern:', match[0], '→', annualTax);
             return annualTax;
@@ -413,6 +457,13 @@ class PropertyDataExtractor {
   // Extract insurance using text patterns
   extractInsuranceFromPatterns() {
     console.log('🏠 Extracting insurance from text patterns...');
+    
+    // First try payment calculator extraction
+    const paymentCalcResult = this.extractFromPaymentCalculator();
+    if (paymentCalcResult.insurance) {
+      console.log('🏠 ✅ Insurance from payment calculator:', paymentCalcResult.insurance);
+      return paymentCalcResult.insurance;
+    }
     
     const searchAreas = [
       document.querySelector('[data-testid="property-details"]'),
@@ -430,7 +481,7 @@ class PropertyDataExtractor {
         const match = areaText.match(pattern);
         if (match) {
           const insuranceValue = extractNumericValue(match[1]);
-          if (insuranceValue && insuranceValue >= 50) {
+          if (insuranceValue && insuranceValue >= 30) { // Lowered threshold to catch monthly amounts
             const annualInsurance = convertToAnnualInsurance(insuranceValue, match[0]);
             console.log('🏠 ✅ Insurance from pattern:', match[0], '→', annualInsurance);
             return annualInsurance;
@@ -440,6 +491,88 @@ class PropertyDataExtractor {
     }
     
     return null;
+  }
+
+  // Extract from payment calculator sections specifically
+  extractFromPaymentCalculator() {
+    console.log('🏠 Extracting from payment calculator...');
+    
+    const results = { tax: null, insurance: null };
+    
+    // Look for payment calculator sections
+    const calcSections = document.querySelectorAll('*');
+    
+    for (const section of calcSections) {
+      const sectionText = getSafeText(section);
+      
+      // Check if this looks like a payment calculator
+      if (sectionText.includes('Payment calculator') || 
+          sectionText.includes('Monthly payment') ||
+          (sectionText.includes('Principal and interest') && sectionText.includes('Property taxes'))) {
+        
+        console.log('🏠 Found payment calculator section');
+        
+        // Extract using line-by-line parsing for better precision
+        const lines = sectionText.split(/[\r\n]+/);
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          
+          // Look for "Property taxes" followed by amount on next line or same line
+          if (line.toLowerCase().includes('property tax')) {
+            // Check current line for amount
+            const currentLineAmount = line.match(/\$([0-9,]+)/);
+            if (currentLineAmount) {
+              const amount = extractNumericValue(currentLineAmount[1]);
+              if (amount && amount >= 50 && amount <= 2000) { // Reasonable monthly tax range
+                results.tax = convertToAnnualTax(amount);
+                console.log('🏠 Found tax in payment calc (same line):', amount, '→', results.tax);
+              }
+            } else if (i + 1 < lines.length) {
+              // Check next line for amount
+              const nextLineAmount = lines[i + 1].match(/\$([0-9,]+)/);
+              if (nextLineAmount) {
+                const amount = extractNumericValue(nextLineAmount[1]);
+                if (amount && amount >= 50 && amount <= 2000) { // Reasonable monthly tax range
+                  results.tax = convertToAnnualTax(amount);
+                  console.log('🏠 Found tax in payment calc (next line):', amount, '→', results.tax);
+                }
+              }
+            }
+          }
+          
+          // Look for "Homeowners insurance" 
+          if (line.toLowerCase().includes('homeowner') && line.toLowerCase().includes('insurance')) {
+            // Check current line for amount
+            const currentLineAmount = line.match(/\$([0-9,]+)/);
+            if (currentLineAmount) {
+              const amount = extractNumericValue(currentLineAmount[1]);
+              if (amount && amount >= 30 && amount <= 1000) { // Reasonable monthly insurance range
+                results.insurance = convertToAnnualInsurance(amount, line);
+                console.log('🏠 Found insurance in payment calc (same line):', amount, '→', results.insurance);
+              }
+            } else if (i + 1 < lines.length) {
+              // Check next line for amount
+              const nextLineAmount = lines[i + 1].match(/\$([0-9,]+)/);
+              if (nextLineAmount) {
+                const amount = extractNumericValue(nextLineAmount[1]);
+                if (amount && amount >= 30 && amount <= 1000) { // Reasonable monthly insurance range
+                  results.insurance = convertToAnnualInsurance(amount, line);
+                  console.log('🏠 Found insurance in payment calc (next line):', amount, '→', results.insurance);
+                }
+              }
+            }
+          }
+        }
+        
+        // If we found both, break
+        if (results.tax && results.insurance) {
+          break;
+        }
+      }
+    }
+    
+    return results;
   }
 
   // Extract tax from Zillow's tax history table (fallback only)
@@ -551,12 +684,12 @@ class PropertyDataExtractor {
     let annualTax = null;
     let annualInsurance = null;
     
-    // Try tax extraction methods in order of reliability
+  // Try tax extraction methods in order of reliability
     const taxMethods = [
-      () => this.extractTaxFromSelectors(),
-      () => this.extractTaxFromContext(),
-      () => this.extractTaxFromPatterns(),
-      () => this.extractTaxFromTable()
+      () => this.extractTaxFromSelectors(price),
+      () => this.extractTaxFromContext(price),
+      () => this.extractTaxFromPatterns(price),
+      () => this.extractTaxFromTable(price)
     ];
     
     for (const method of taxMethods) {
