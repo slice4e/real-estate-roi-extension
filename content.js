@@ -114,6 +114,53 @@ function extractPropertyData() {
         '[data-testid="tax-history"]'
       ];
       
+      // Also look for any element containing "Public tax history"
+      const publicTaxElements = document.querySelectorAll('*');
+      for (const element of publicTaxElements) {
+        const text = element.textContent || element.innerText;
+        if (text.includes('Public tax history')) {
+          console.log('🏠 Found "Public tax history" section');
+          // Look for table rows within this section
+          const parent = element.closest('section, div, [class*="section"]') || element.parentElement;
+          if (parent) {
+            // Look for table structure with Year | Property taxes | Tax assessment
+            const rows = parent.querySelectorAll('tr, [role="row"], [class*="row"]');
+            let mostRecentTax = null;
+            let mostRecentYear = 0;
+            
+            for (const row of rows) {
+              const rowText = row.textContent || row.innerText;
+              console.log('🏠 Checking tax history row:', rowText);
+              
+              // Look for year pattern (2024, 2023, etc.)
+              const yearMatch = rowText.match(/20\d{2}/);
+              if (yearMatch) {
+                const year = parseInt(yearMatch[0]);
+                // Look for property tax amount in same row (format: $5,556 +19.1%)
+                const taxMatch = rowText.match(/\$([0-9,]+)/g);
+                if (taxMatch && taxMatch.length > 0) {
+                  // Get the first tax amount (property taxes column)
+                  const taxAmount = extractNumericValue(taxMatch[0]);
+                  if (taxAmount && taxAmount > 500) {
+                    console.log(`🏠 Found tax for year ${year}: $${taxAmount}`);
+                    if (year > mostRecentYear) {
+                      mostRecentYear = year;
+                      mostRecentTax = taxAmount;
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (mostRecentTax) {
+              console.log(`🏠 ✅ Most recent tax from Public tax history: ${mostRecentYear} = $${mostRecentTax}`);
+              return mostRecentTax;
+            }
+          }
+        }
+      }
+      
+      // Fallback to original table detection
       for (const selector of tableSelectors) {
         const table = document.querySelector(selector);
         if (table) {
@@ -154,17 +201,72 @@ function extractPropertyData() {
       return null;
     };
     
+    // Method 1.5: Try newer Zillow tax selectors first
+    if (!annualTax) {
+      console.log('🏠 Trying enhanced Zillow tax selectors...');
+      const enhancedZillowSelectors = [
+        // Modern Zillow tax history selectors
+        '[data-testid="property-tax-history"] .Text-c11n-8-84-3__sc-aiai24-0',
+        '[data-testid="tax-assessments"] .Text-c11n-8-84-3__sc-aiai24-0',
+        '.PropertyTaxes-c11n-8-84-3__sc-1l1c55w-0 .Text-c11n-8-84-3__sc-aiai24-0',
+        
+        // Tax fact section
+        '[aria-label*="tax" i] .Text-c11n-8-84-3__sc-aiai24-0',
+        '[data-testid*="tax" i] .Text-c11n-8-84-3__sc-aiai24-0',
+        
+        // Property details tax rows
+        'dt:contains("Tax") + dd',
+        '.fact-row:contains("Tax") .fact-value',
+        
+        // Tax history in tables - more specific
+        '.tax-history-container .Text-c11n-8-84-3__sc-aiai24-0',
+        '.property-tax-container .Text-c11n-8-84-3__sc-aiai24-0'
+      ];
+      
+      for (const selector of enhancedZillowSelectors) {
+        try {
+          console.log('🏠 Trying enhanced selector:', selector);
+          const element = document.querySelector(selector);
+          if (element) {
+            const taxText = element.textContent || element.innerText;
+            console.log('🏠 Found enhanced element:', selector, taxText);
+            let taxValue = extractNumericValue(taxText);
+            if (taxValue && isValidTaxAmount(taxValue)) {
+              // Convert monthly to annual if needed
+              if (taxValue < 1200) {
+                console.log('🏠 Converting monthly tax to annual:', taxValue, '→', taxValue * 12);
+                taxValue = taxValue * 12;
+              }
+              annualTax = taxValue;
+              console.log('🏠 ✅ Tax from enhanced selector:', annualTax);
+              break;
+            }
+          }
+        } catch (e) {
+          console.log('🏠 Enhanced selector error:', e);
+        }
+      }
+    }
+    
     // Try tax table extraction first
     annualTax = tryExtractFromTaxTable();
     
-    // Method 2: Look for tax history section specifically
+    // Method 2: Look for tax history section specifically with enhanced selectors
     if (!annualTax) {
+      console.log('🏠 Method 2: Enhanced tax history selectors...');
       const zillowTaxHistorySelectors = [
-        // Tax history table or section
-        '[data-testid="tax-history-table"] td:last-child',
-        '[data-testid="tax-history"] .ds-text:last-child',
-        '.tax-history-table td:last-child',
-        '.tax-history .ds-text',
+        // Primary tax history selectors
+        '[data-testid="tax-history-table"] tr:first-child td:last-child',
+        '[data-testid="tax-history"] .ds-text',
+        '.tax-history-table tr:first-child td:last-child',
+        
+        // Tax assessment and evaluation selectors  
+        '[data-testid="property-tax-assessments"] .Text-c11n-8-84-3__sc-aiai24-0',
+        '[data-testid="tax-assessment"] .Text-c11n-8-84-3__sc-aiai24-0',
+        
+        // Public records tax information
+        '.public-records-tax .Text-c11n-8-84-3__sc-aiai24-0',
+        '[aria-label*="property tax" i] .Text-c11n-8-84-3__sc-aiai24-0',
         
         // Property facts section
         '[data-testid="property-details-tax-info"] .Text-c11n-8-84-3__sc-aiai24-0',
@@ -179,23 +281,67 @@ function extractPropertyData() {
       
       for (const selector of zillowTaxHistorySelectors) {
         console.log('🏠 Trying tax history selector:', selector);
-        const element = document.querySelector(selector);
-        if (element) {
-          const taxText = element.textContent || element.innerText;
-          console.log('🏠 Found tax history element:', selector, taxText);
-          let taxValue = extractNumericValue(taxText);
-          if (taxValue && taxValue > 500) { // Must be reasonable annual tax amount
-            // If it's clearly an annual amount (typically > $1200), use as is
-            // If it looks monthly (< $1200), convert to annual
-            if (taxValue < 1200) {
-              console.log('🏠 Converting monthly tax to annual:', taxValue, '→', taxValue * 12);
-              taxValue = taxValue * 12;
+        try {
+          const element = document.querySelector(selector);
+          if (element) {
+            const taxText = element.textContent || element.innerText;
+            console.log('🏠 Found tax history element:', selector, taxText);
+            let taxValue = extractNumericValue(taxText);
+            if (taxValue && isValidTaxAmount(taxValue)) {
+              // If it's clearly an annual amount (typically > $1200), use as is
+              // If it looks monthly (< $1200), convert to annual
+              if (taxValue < 1200) {
+                console.log('🏠 Converting monthly tax to annual:', taxValue, '→', taxValue * 12);
+                taxValue = taxValue * 12;
+              }
+              annualTax = taxValue;
+              console.log('🏠 ✅ Tax from history section:', annualTax);
+              break;
             }
-            annualTax = taxValue;
-            console.log('🏠 ✅ Tax from history section:', annualTax);
-            break;
+          }
+        } catch (e) {
+          console.log('🏠 Selector error:', selector, e);
+        }
+      }
+    }
+    
+    // Method 2.3: Look specifically for property assessment data
+    if (!annualTax) {
+      console.log('🏠 Method 2.3: Looking for property assessment data...');
+      
+      // Search for text patterns that indicate tax assessments
+      const assessmentPatterns = [
+        /property\s+tax[:\s]*\$?([\d,]+)/gi,
+        /annual\s+tax[:\s]*\$?([\d,]+)/gi,
+        /tax\s+assessment[:\s]*\$?([\d,]+)/gi,
+        /assessed\s+tax[:\s]*\$?([\d,]+)/gi,
+        /county\s+tax[:\s]*\$?([\d,]+)/gi
+      ];
+      
+      // Get page text but exclude payment calculator sections
+      const pageText = document.body.textContent || document.body.innerText;
+      const excludePattern = /(monthly\s+payment|mortgage\s+payment|estimated\s+monthly)/gi;
+      
+      // Split into sections and exclude payment-related sections
+      const sections = pageText.split(/\n\s*\n/);
+      
+      for (const section of sections) {
+        if (!excludePattern.test(section)) {
+          for (const pattern of assessmentPatterns) {
+            const matches = [...section.matchAll(pattern)];
+            for (const match of matches) {
+              const taxValue = extractNumericValue(match[1]);
+              if (taxValue && isValidTaxAmount(taxValue)) {
+                console.log('🏠 Found tax from assessment pattern:', match[0], '→', taxValue);
+                annualTax = taxValue > 1200 ? taxValue : taxValue * 12;
+                console.log('🏠 ✅ Tax from assessment pattern:', annualTax);
+                break;
+              }
+            }
+            if (annualTax) break;
           }
         }
+        if (annualTax) break;
       }
     }
     
@@ -205,23 +351,91 @@ function extractPropertyData() {
       const tables = document.querySelectorAll('table, .facts-table, .property-facts, [class*="table"]');
       
       for (const table of tables) {
-        const cells = table.querySelectorAll('td, th, .cell, [class*="cell"]');
-        for (let i = 0; i < cells.length; i++) {
-          const cell = cells[i];
-          const cellText = (cell.textContent || cell.innerText || '').toLowerCase();
+        // First, look for Zillow's specific "Property taxes" column structure
+        const tableText = table.textContent || table.innerText;
+        if (tableText.includes('Property taxes') && tableText.includes('Year')) {
+          console.log('🏠 Found table with "Property taxes" column header');
           
-          // Look for cells containing tax-related keywords
-          if (cellText.includes('tax') || cellText.includes('property tax') || cellText.includes('annual tax')) {
-            // Check the next cell or sibling for the tax amount
-            const nextCell = cells[i + 1] || cell.nextElementSibling;
-            if (nextCell) {
-              const nextText = nextCell.textContent || nextCell.innerText;
-              const taxValue = extractNumericValue(nextText);
-              if (taxValue && taxValue > 500) {
-                console.log('🏠 Found tax in table:', cellText, '→', nextText, '=', taxValue);
-                annualTax = taxValue > 1200 ? taxValue : taxValue * 12;
-                console.log('🏠 ✅ Tax from table search:', annualTax);
+          // Find the header row and locate column positions
+          const rows = table.querySelectorAll('tr, [role="row"]');
+          let propertyTaxColumnIndex = -1;
+          let headerRow = null;
+          
+          // Find the header row and property tax column index
+          for (const row of rows) {
+            const cells = row.querySelectorAll('td, th, [role="cell"], [role="columnheader"]');
+            for (let i = 0; i < cells.length; i++) {
+              const cellText = (cells[i].textContent || cells[i].innerText || '').toLowerCase();
+              if (cellText.includes('property tax')) {
+                propertyTaxColumnIndex = i;
+                headerRow = row;
+                console.log('🏠 Found "Property taxes" column at index:', i);
                 break;
+              }
+            }
+            if (propertyTaxColumnIndex >= 0) break;
+          }
+          
+          // Extract tax values from the property tax column
+          if (propertyTaxColumnIndex >= 0) {
+            let mostRecentTax = null;
+            let mostRecentYear = 0;
+            
+            for (const row of rows) {
+              if (row === headerRow) continue; // Skip header row
+              
+              const cells = row.querySelectorAll('td, th, [role="cell"]');
+              if (cells.length > propertyTaxColumnIndex) {
+                const yearCell = cells[0]; // First column should be year
+                const taxCell = cells[propertyTaxColumnIndex];
+                
+                const yearText = yearCell.textContent || yearCell.innerText;
+                const taxText = taxCell.textContent || taxCell.innerText;
+                
+                const yearMatch = yearText.match(/20\d{2}/);
+                if (yearMatch) {
+                  const year = parseInt(yearMatch[0]);
+                  const taxAmount = extractNumericValue(taxText);
+                  
+                  if (taxAmount && taxAmount > 500) {
+                    console.log(`🏠 Found tax for year ${year}: $${taxAmount} from "${taxText}"`);
+                    if (year > mostRecentYear) {
+                      mostRecentYear = year;
+                      mostRecentTax = taxAmount;
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (mostRecentTax) {
+              annualTax = mostRecentTax;
+              console.log(`🏠 ✅ Most recent tax from Property taxes column: ${mostRecentYear} = $${annualTax}`);
+              break;
+            }
+          }
+        }
+        
+        // Fallback to general table search if specific structure not found
+        if (!annualTax) {
+          const cells = table.querySelectorAll('td, th, .cell, [class*="cell"]');
+          for (let i = 0; i < cells.length; i++) {
+            const cell = cells[i];
+            const cellText = (cell.textContent || cell.innerText || '').toLowerCase();
+            
+            // Look for cells containing tax-related keywords
+            if (cellText.includes('tax') || cellText.includes('property tax') || cellText.includes('annual tax')) {
+              // Check the next cell or sibling for the tax amount
+              const nextCell = cells[i + 1] || cell.nextElementSibling;
+              if (nextCell) {
+                const nextText = nextCell.textContent || nextCell.innerText;
+                const taxValue = extractNumericValue(nextText);
+                if (taxValue && taxValue > 500) {
+                  console.log('🏠 Found tax in table:', cellText, '→', nextText, '=', taxValue);
+                  annualTax = taxValue > 1200 ? taxValue : taxValue * 12;
+                  console.log('🏠 ✅ Tax from general table search:', annualTax);
+                  break;
+                }
               }
             }
           }
