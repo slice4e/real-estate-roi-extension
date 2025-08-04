@@ -84,7 +84,8 @@ function populateFormDefaults(strategy) {
   }
 }
 
-// Function to calculate and update default ARV based on purchase price + 2 × improvements (HELOC strategy only)
+// Function to calculate and update default ARV based on purchase price / 0.7 (HELOC strategy only)
+// If ARV is user-modified, preserve that value
 function updateDefaultARV(overridePurchasePrice = null, forceUpdate = false) {
   // Only calculate ARV for HELOC strategy
   if (currentStrategy !== 'heloc') {
@@ -128,17 +129,19 @@ function updateDefaultARV(overridePurchasePrice = null, forceUpdate = false) {
     console.log('  - Calculation:', purchasePrice, '/ 0.7 =', defaultARV);
     
     // Only update if ARV field is empty, has the old default value, or if using override price (auto-calculated), or forced
+    // But don't update if user has manually entered an ARV value
     const currentARV = parseFloat(arvField.value) || 0;
-    console.log('🏠 Current ARV value:', currentARV, 'Calculated ARV:', defaultARV);
+    const isUserModifiedARV = arvField.getAttribute('data-user-entered') === 'true';
+    console.log('🏠 Current ARV value:', currentARV, 'Calculated ARV:', defaultARV, 'User modified:', isUserModifiedARV);
     
-    if (currentARV === 0 || currentARV === 220000 || overridePurchasePrice || forceUpdate) {
+    if (!isUserModifiedARV && (currentARV === 0 || currentARV === 220000 || overridePurchasePrice || forceUpdate)) {
       arvField.value = Math.round(defaultARV);
       console.log('🏠 ✅ Updated ARV field to:', Math.round(defaultARV), 
         overridePurchasePrice ? '(override price provided)' : 
         forceUpdate ? '(forced update)' : 
         '(field was empty/default)');
     } else {
-      console.log('🏠 ❌ ARV field already has user value, not updating:', currentARV);
+      console.log('🏠 ❌ ARV field not updated - user has manually entered value or other conditions not met:', currentARV, 'User modified:', isUserModifiedARV);
     }
   } else {
     console.log('🏠 ❌ Invalid purchase price for ARV calculation:', purchasePrice);
@@ -205,6 +208,7 @@ function calculateTargetPurchasePriceHeloc(askingPrice, annualTax, params) {
     
     console.log(`🏠 HELOC iteration ${iterations}: testPrice=${Math.round(testPrice)}, calculatedARV=${Math.round(testParams.arv)}`);
     console.log(`🏠 ARV calculation check: ${Math.round(testPrice)} / 0.7 = ${Math.round(testParams.arv)}`);
+    console.log(`🏠 Renovation period: ${params.renovationPeriod} months ${params.renovationPeriod < 6 ? '(time constraint applies)' : '(no time constraint)'}`);
     
     const result = calculateHelocROI(askingPrice, annualTax, testParams);
     
@@ -334,8 +338,17 @@ function calculateHelocROI(askingPrice, annualTax, params) {
   const holdingCosts = helocMonthlyPayment * totalHoldingPeriod;
   const totalCashIn = initialCashIn + holdingCosts;
   
-  // Refinance calculations - with renovation complete, can refinance up to 70% of ARV
-  const refinanceLoanAmount = params.arv * 0.70;
+  // Refinance calculations - with time-based constraint
+  // If renovation period < 6 months, refinance cannot exceed purchase price
+  const maxRefinanceByTime = params.renovationPeriod < 6 ? purchasePrice : Infinity;
+  const maxRefinanceByARV = params.arv * 0.70;
+  const refinanceLoanAmount = Math.min(maxRefinanceByTime, maxRefinanceByARV);
+  
+  console.log(`🏠 Refinance calculation:`);
+  console.log(`  - Renovation period: ${params.renovationPeriod} months`);
+  console.log(`  - Purchase price limit: ${params.renovationPeriod < 6 ? '$' + purchasePrice.toLocaleString() : 'No limit'}`);
+  console.log(`  - 70% of ARV: $${maxRefinanceByARV.toLocaleString()}`);
+  console.log(`  - Final refinance amount: $${refinanceLoanAmount.toLocaleString()}`);
   
   const refinanceClosingCosts = 5000; // Fixed from original spreadsheet
   const cashOut = refinanceLoanAmount - refinanceClosingCosts;
@@ -368,6 +381,7 @@ function calculateHelocROI(askingPrice, annualTax, params) {
     cashOut,
     finalCashIn,
     arv: params.arv,
+    refinanceLoanAmount,
     mortgagePayment,
     helocPayment: helocMonthlyPayment,
     monthlyCashFlowWithHeloc,
@@ -375,6 +389,7 @@ function calculateHelocROI(askingPrice, annualTax, params) {
     roi,
     paybackPeriod,
     holdingCosts,
+    renovationPeriod: params.renovationPeriod,
     details: {
       rent: params.rent,
       taxes: monthlyTax,
@@ -463,22 +478,25 @@ function formatResults(calculation, isHeloc) {
           
     // Get the actual refinance loan amount from the calculation
     const refinanceClosingCosts = 5000;
-    const actualRefinanceLoanAmount = calculation.arv * 0.70;
+    const totalHoldingPeriod = (calculation.holdingCosts / calculation.helocPayment);
+    const renovationPeriod = Math.round(totalHoldingPeriod - 1); // Subtract 1 month for refinancing
+    const hasTimeConstraint = renovationPeriod < 6;
     
     html += `
       <strong>INITIAL INVESTMENT:</strong><br>
       - Purchase Price: $${calculation.purchasePrice.toLocaleString()}<br>
       - Closing Costs: $1,000<br>
       - Improvements: $${(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts).toLocaleString()}<br>
-      - HELOC Payments (holding period only - ${Math.round((calculation.holdingCosts / calculation.helocPayment))} months): $${calculation.holdingCosts.toLocaleString()}<br>
+      - HELOC Payments (holding period only - ${Math.round(totalHoldingPeriod)} months): $${calculation.holdingCosts.toLocaleString()}<br>
       <small style="color: #666;">  * HELOC paid off at refinance completion</small><br>
       <strong>= Total Cash In: $${calculation.totalCashIn.toLocaleString()}</strong><br><br>
       
       <strong>REFINANCE RECOVERY:</strong><br>
       - ARV (After Repair Value): $${calculation.arv.toLocaleString()}<br>
-      - Renovation Complete: Property ready for refinance<br>
-      - Refinance Limit: 70% of ARV<br>
-      - Refinance Loan Amount: $${Math.round(calculation.arv * 0.7).toLocaleString()}<br>
+      - Renovation Period: ${renovationPeriod} months ${hasTimeConstraint ? '(<6 months)' : '(≥6 months)'}<br>
+      - Standard Refinance Limit: 70% of ARV = $${Math.round(calculation.arv * 0.7).toLocaleString()}<br>
+      ${hasTimeConstraint ? `- Time Constraint: Cannot exceed purchase price = $${calculation.purchasePrice.toLocaleString()}<br>` : ''}
+      - Actual Refinance Loan Amount: $${Math.round(calculation.refinanceLoanAmount).toLocaleString()}<br>
       - Refinance Closing Costs: -$${refinanceClosingCosts.toLocaleString()}<br>
       <strong>= Cash Out: $${calculation.cashOut.toLocaleString()}</strong><br><br>
       
@@ -701,6 +719,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const helocAmountField = document.getElementById('helocAmount');
     if (improvementsValue > 0 && (!helocAmountField.value || helocAmountField.value == 10000)) {
       helocAmountField.value = improvementsValue;
+    }
+  });
+  
+  // Add listener for ARV field to track user modifications
+  document.getElementById('arv').addEventListener('input', function() {
+    // Mark ARV as manually entered when user types
+    this.setAttribute('data-user-entered', 'true');
+    console.log('🏠 ARV field manually modified by user');
+    
+    if (currentData) {
+      updateResults();
     }
   });
   
