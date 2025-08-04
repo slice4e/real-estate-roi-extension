@@ -19,7 +19,21 @@ const SELECTORS = {
       '[data-rf-test-id="abp-taxHistory"] .value',
       '.tax-history .value',
       '.property-taxes .value',
-      '.tax-amount'
+      '.tax-amount',
+      // Enhanced selectors for more coverage
+      '.keyDetail-value',
+      '.amenity-value',
+      '.fact-value',
+      '.property-history .value',
+      '[class*="tax" i] .value',
+      '[class*="property" i] [class*="tax" i]',
+      '.keyDetail span',
+      '.amenity span',
+      '.fact span',
+      // Generic fallbacks
+      'span[title*="tax" i]',
+      'div[title*="tax" i]',
+      'li[title*="tax" i]'
     ],
     insurance: [
       '[data-rf-test-id*="insurance" i] .value',
@@ -27,7 +41,20 @@ const SELECTORS = {
       '.home-insurance .value',
       '.property-insurance .value',
       '.hazard-insurance .value',
-      '[class*="insurance"] .value'
+      '[class*="insurance"] .value',
+      // Enhanced selectors for more coverage
+      '.keyDetail-value',
+      '.amenity-value',
+      '.fact-value',
+      '[class*="insurance" i] .value',
+      '[class*="homeowners" i] .value',
+      '.keyDetail span',
+      '.amenity span',
+      '.fact span',
+      // Generic fallbacks
+      'span[title*="insurance" i]',
+      'div[title*="insurance" i]',
+      'li[title*="insurance" i]'
     ]
   },
   zillow: {
@@ -66,7 +93,15 @@ const TAX_PATTERNS = [
   /Property\s+tax(?:es)?\s*:?\s*\$([0-9,]+)/i,
   /Tax\s*\(\d{4}\)\s*:?\s*\$([0-9,]+)/i,
   /(?:Tax\s+)?Assessment\s*:?\s*\$([0-9,]+)/i,
-  /Property\s+tax\s*\(?\d{4}\)?\s*:?\s*\$([0-9,]+)(?!\s*\/\s*mo)/i
+  /Property\s+tax\s*\(?\d{4}\)?\s*:?\s*\$([0-9,]+)(?!\s*\/\s*mo)/i,
+  // Enhanced patterns for more flexibility
+  /Property\s+taxes\s*\$([0-9,]+)/i,
+  /Tax(?:es)?\s*amount\s*\$([0-9,]+)/i,
+  /Annual\s*property\s*tax\s*\$([0-9,]+)/i,
+  /County\s*tax(?:es)?\s*\$([0-9,]+)/i,
+  /Real\s*estate\s*tax(?:es)?\s*\$([0-9,]+)/i,
+  /\$([0-9,]+)\s*(?:annual\s*)?(?:property\s*)?tax(?:es)?/i,
+  /tax(?:es)?\s*[:]*\s*\$([0-9,]+)(?!\s*\/\s*mo)/i
 ];
 
 const INSURANCE_PATTERNS = [
@@ -76,7 +111,14 @@ const INSURANCE_PATTERNS = [
   /Insurance\s*\(\d{4}\)\s*:?\s*\$([0-9,]+)/i,
   /Annual\s+insurance\s*:?\s*\$([0-9,]+)/i,
   /Monthly\s+insurance\s*:?\s*\$([0-9,]+)/i,
-  /Insurance\s+cost\s*:?\s*\$([0-9,]+)/i
+  /Insurance\s+cost\s*:?\s*\$([0-9,]+)/i,
+  // Enhanced patterns for more flexibility
+  /Home\s*insurance\s*\$([0-9,]+)/i,
+  /Property\s*insurance\s*\$([0-9,]+)/i,
+  /Insurance\s*amount\s*\$([0-9,]+)/i,
+  /Homeowners\s*insurance\s*\$([0-9,]+)/i,
+  /\$([0-9,]+)\s*(?:home|homeowners?|property)\s*insurance/i,
+  /insurance\s*[:]*\s*\$([0-9,]+)/i
 ];
 
 const TAX_KEYWORDS = ['tax', 'property tax', 'annual tax', 'county tax', 'assessment', 'levy'];
@@ -451,6 +493,56 @@ class PropertyDataExtractor {
     return null;
   }
 
+  // Comprehensive fallback extraction for both tax and insurance
+  extractFromAllPageText() {
+    console.log('🏠 Fallback: Scanning all page text for tax/insurance data...');
+    
+    const results = { tax: null, insurance: null };
+    
+    // Get all text content from the page
+    const allText = document.body.innerText || document.body.textContent || '';
+    
+    // Look for any dollar amounts with tax-related keywords nearby
+    const dollarMatches = allText.match(/(?:tax|property tax|annual tax|county tax|assessment|levy)[\s\S]{0,50}\$([0-9,]+)|\$([0-9,]+)[\s\S]{0,50}(?:tax|property tax|annual tax|county tax|assessment|levy)/gi);
+    
+    if (dollarMatches) {
+      for (const match of dollarMatches) {
+        const amounts = match.match(/\$([0-9,]+)/g);
+        if (amounts) {
+          for (const amountStr of amounts) {
+            const amount = extractNumericValue(amountStr);
+            if (amount && isValidTaxAmount(amount, true) && !results.tax) {
+              results.tax = convertToAnnualTax(amount);
+              console.log('🏠 ✅ Tax from full page scan:', results.tax, 'Context:', match.substring(0, 60));
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // Look for any dollar amounts with insurance-related keywords nearby
+    const insuranceMatches = allText.match(/(?:insurance|homeowner|home insurance|property insurance|hazard insurance)[\s\S]{0,50}\$([0-9,]+)|\$([0-9,]+)[\s\S]{0,50}(?:insurance|homeowner|home insurance|property insurance|hazard insurance)/gi);
+    
+    if (insuranceMatches) {
+      for (const match of insuranceMatches) {
+        const amounts = match.match(/\$([0-9,]+)/g);
+        if (amounts) {
+          for (const amountStr of amounts) {
+            const amount = extractNumericValue(amountStr);
+            if (amount && amount >= 50 && amount <= 15000 && !results.insurance) {
+              results.insurance = convertToAnnualInsurance(amount, match);
+              console.log('🏠 ✅ Insurance from full page scan:', results.insurance, 'Context:', match.substring(0, 60));
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    return results;
+  }
+
   // Main extraction method
   extract() {
     console.log('🏠 Starting property data extraction...');
@@ -489,6 +581,22 @@ class PropertyDataExtractor {
         if (annualInsurance) break;
       } catch (error) {
         console.log('🏠 Insurance extraction method failed:', error.message);
+      }
+    }
+
+    // Final fallback: comprehensive page text scan
+    if (!annualTax || !annualInsurance) {
+      console.log('🏠 Using comprehensive fallback extraction...');
+      try {
+        const fallbackResults = this.extractFromAllPageText();
+        if (!annualTax && fallbackResults.tax) {
+          annualTax = fallbackResults.tax;
+        }
+        if (!annualInsurance && fallbackResults.insurance) {
+          annualInsurance = fallbackResults.insurance;
+        }
+      } catch (error) {
+        console.log('🏠 Fallback extraction failed:', error.message);
       }
     }
     
