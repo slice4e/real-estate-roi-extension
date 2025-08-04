@@ -2,7 +2,7 @@
 
 A sophisticated Chrome browser extension that automatically calculates Return on Investment (ROI) for real estate properties using two distinct investment strategies: **Conventional Financing** and **Cash + HELOC Refinance**. Designed for Redfin and Zillow listing pages.
 
-**Version 1.1** features dramatically improved code quality with a professional class-based architecture while maintaining 100% of the original functionality.
+**Version 1.1** features dramatically improved code quality with a professional class-based architecture, enhanced property data extraction including insurance costs, while maintaining 100% of the original functionality.
 
 ## 🚀 Key Features
 
@@ -17,8 +17,10 @@ A sophisticated Chrome browser extension that automatically calculates Return on
 
 ### **Automatic Data Extraction**
 - **Multi-Platform Support**: Works on both Redfin and Zillow property listings
-- **Smart Property Detection**: Automatically extracts asking price and annual property taxes
+- **Smart Property Detection**: Automatically extracts asking price, annual property taxes, and homeowners insurance
+- **Payment Calculator Integration**: Advanced extraction from mortgage payment calculators for accurate tax and insurance data
 - **Fallback Tax Estimation**: Uses 1.5% estimation when tax data unavailable
+- **Insurance Auto-Population**: Extracted insurance values automatically populate form fields and override defaults
 
 ### **Advanced ARV Calculations**
 - **HELOC Strategy Only**: ARV = Purchase Price + (2 × Improvement Costs)
@@ -222,7 +224,11 @@ real-estate-roi-extension/
    - Mortgage calculator patterns (most reliable)
    - Property tax history tables
    - Tax assessment records
-3. **Error Handling**: Graceful fallbacks and user notifications
+3. **Insurance Extraction**:
+   - Payment calculator homeowners insurance detection
+   - Monthly to annual conversion with validation
+   - Form field auto-population with extracted values
+4. **Error Handling**: Graceful fallbacks and user notifications
 
 ## 🐛 Development & Debugging
 
@@ -235,7 +241,8 @@ Utils.logCalculation('Binary search iteration', { iteration, roi: roi.toFixed(2)
 ```
 
 **Debug Categories (Enhanced in v1.1)**:
-- **🏠 Data Extraction**: Property price and tax detection
+- **🏠 Data Extraction**: Property price, tax, and insurance detection
+- **🏠 Payment Calculator**: Advanced extraction from payment calculators
 - **🏠 Binary Search**: Target price optimization iterations  
 - **🏠 ARV Calculation**: After Repair Value computations
 - **🏠 Strategy Switching**: Tab changes and field management
@@ -325,6 +332,9 @@ This tool is for **educational and analysis purposes only**. Always:
 - **Centralized Configuration**: CONFIG object eliminates magic numbers
 - **Professional Architecture**: Improved maintainability and readability
 - **Enhanced Debugging**: Centralized logging and error handling
+- **Insurance Auto-Extraction**: Automatic detection and form population of homeowners insurance from payment calculators
+- **Payment Calculator Integration**: Advanced extraction from mortgage payment breakdowns for accurate tax and insurance data
+- **Improved Data Accuracy**: Enhanced precision in tax extraction to prevent cross-contamination between payment components
 - **100% Backward Compatibility**: All v1.0 functionality preserved
 
 ### **Version 1.0** (August 2025)
