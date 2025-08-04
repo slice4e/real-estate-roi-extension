@@ -228,11 +228,11 @@ class FormDefaults {
       if (['rent', 'improvements', 'renovationPeriod'].includes(key)) return;
       
       // Use extracted insurance value if available
-      if (key === 'insurance' && appState.data && appState.data.annualInsurance) {
-        const monthlyInsurance = Math.round(appState.data.annualInsurance / 12);
+      if (key === 'insurance' && appState.currentData && appState.currentData.annualInsurance) {
+        const monthlyInsurance = Math.round(appState.currentData.annualInsurance / 12);
         Utils.setElementValue(FIELD_IDS[key], monthlyInsurance);
         Utils.logCalculation('Using extracted insurance', { 
-          annual: appState.data.annualInsurance, 
+          annual: appState.currentData.annualInsurance, 
           monthly: monthlyInsurance 
         });
       } else if (FIELD_IDS[key]) {
@@ -906,16 +906,33 @@ class UIManager {
     const propertyInfo = Utils.getElement("property-info");
     propertyInfo.style.display = "block";
     
+    // Debug logging
+    Utils.logCalculation('Property info display', { 
+      price: data.price, 
+      annualTax: data.annualTax, 
+      annualInsurance: data.annualInsurance 
+    });
+    
+    let html = `<strong>Property:</strong> $${Utils.formatCurrency(data.price)} asking price<br>`;
+    
+    // Add tax information
     if (data.annualTax) {
-      propertyInfo.innerHTML = `
-        <strong>Property:</strong> $${Utils.formatCurrency(data.price)} asking price<br>
-        <strong>Annual Taxes:</strong> $${Utils.formatCurrency(data.annualTax)}`;
+      html += `<strong>Annual Taxes:</strong> $${Utils.formatCurrency(data.annualTax)}<br>`;
     } else {
       const estimatedTax = Math.round(data.price * CONFIG.thresholds.estimatedTaxRate);
-      propertyInfo.innerHTML = `
-        <strong>Property:</strong> $${Utils.formatCurrency(data.price)} asking price<br>
-        <strong>Annual Taxes:</strong> <span style="color: ${CONFIG.colors.warning};">~$${Utils.formatCurrency(estimatedTax)} (estimated - tax data not found)</span>`;
+      html += `<strong>Annual Taxes:</strong> <span style="color: ${CONFIG.colors.warning};">~$${Utils.formatCurrency(estimatedTax)} (estimated - tax data not found)</span><br>`;
     }
+    
+    // Add insurance information
+    if (data.annualInsurance && data.annualInsurance > CONFIG.defaults.conventional.insurance * 12) {
+      const monthlyInsurance = Math.round(data.annualInsurance / 12);
+      html += `<strong>Annual Insurance:</strong> $${Utils.formatCurrency(data.annualInsurance)} (~$${monthlyInsurance}/month - extracted)`;
+    } else {
+      const defaultAnnual = CONFIG.defaults.conventional.insurance * 12;
+      html += `<strong>Annual Insurance:</strong> <span style="color: ${CONFIG.colors.warning};">~$${Utils.formatCurrency(defaultAnnual)} (default - not found on page)</span>`;
+    }
+    
+    propertyInfo.innerHTML = html;
   }
 }
 
