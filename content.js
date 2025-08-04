@@ -171,7 +171,6 @@ function extractPropertyData() {
         '.property-details-tax .ds-text',
         
         // Facts and features section
-        '.facts-table td:contains("Tax") + td',
         '.property-facts .tax-amount',
         
         // Overview section tax info
@@ -197,6 +196,37 @@ function extractPropertyData() {
             break;
           }
         }
+      }
+    }
+    
+    // Method 2.5: Search for tax information in tables using JavaScript
+    if (!annualTax) {
+      console.log('🏠 Searching for tax information in tables...');
+      const tables = document.querySelectorAll('table, .facts-table, .property-facts, [class*="table"]');
+      
+      for (const table of tables) {
+        const cells = table.querySelectorAll('td, th, .cell, [class*="cell"]');
+        for (let i = 0; i < cells.length; i++) {
+          const cell = cells[i];
+          const cellText = (cell.textContent || cell.innerText || '').toLowerCase();
+          
+          // Look for cells containing tax-related keywords
+          if (cellText.includes('tax') || cellText.includes('property tax') || cellText.includes('annual tax')) {
+            // Check the next cell or sibling for the tax amount
+            const nextCell = cells[i + 1] || cell.nextElementSibling;
+            if (nextCell) {
+              const nextText = nextCell.textContent || nextCell.innerText;
+              const taxValue = extractNumericValue(nextText);
+              if (taxValue && taxValue > 500) {
+                console.log('🏠 Found tax in table:', cellText, '→', nextText, '=', taxValue);
+                annualTax = taxValue > 1200 ? taxValue : taxValue * 12;
+                console.log('🏠 ✅ Tax from table search:', annualTax);
+                break;
+              }
+            }
+          }
+        }
+        if (annualTax) break;
       }
     }
     
