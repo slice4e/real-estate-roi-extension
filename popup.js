@@ -78,7 +78,7 @@ function populateFormDefaults(strategy) {
     document.getElementById('refinanceRate').value = 7.63;
   }
   
-  // Calculate default ARV only for HELOC strategy: purchase price + 2 × improvements
+  // Calculate default ARV only for HELOC strategy: purchase price / 0.7
   if (strategy === 'heloc') {
     updateDefaultARV();
   }
@@ -120,13 +120,12 @@ function updateDefaultARV(overridePurchasePrice = null, forceUpdate = false) {
   }
   
   if (purchasePrice && purchasePrice > 0) {
-    const defaultARV = purchasePrice + (2 * improvements);
+    const defaultARV = purchasePrice / 0.7;
     
     console.log('🏠 ARV Calculation Details:');
     console.log('  - Purchase Price:', purchasePrice);
-    console.log('  - Improvements:', improvements);
-    console.log('  - Formula: Purchase Price + (2 × Improvements)');
-    console.log('  - Calculation:', purchasePrice, '+ (2 ×', improvements, ') =', defaultARV);
+    console.log('  - Formula: Purchase Price / 0.7 (reverse of 70% LTV)');
+    console.log('  - Calculation:', purchasePrice, '/ 0.7 =', defaultARV);
     
     // Only update if ARV field is empty, has the old default value, or if using override price (auto-calculated), or forced
     const currentARV = parseFloat(arvField.value) || 0;
@@ -201,11 +200,11 @@ function calculateTargetPurchasePriceHeloc(askingPrice, annualTax, params) {
     // Create a copy of params with the test price as a manual override
     const testParams = { ...params, targetPurchasePrice: testPrice };
     
-    // Calculate ARV for this test price: purchase price + 2 × improvements
-    testParams.arv = testPrice + (2 * params.improvements);
+    // Calculate ARV for this test price: purchase price / 0.7
+    testParams.arv = testPrice / 0.7;
     
-    console.log(`🏠 HELOC iteration ${iterations}: testPrice=${Math.round(testPrice)}, improvements=${params.improvements}, calculatedARV=${Math.round(testParams.arv)}`);
-    console.log(`🏠 ARV calculation check: ${Math.round(testPrice)} + (2 × ${params.improvements}) = ${Math.round(testParams.arv)}`);
+    console.log(`🏠 HELOC iteration ${iterations}: testPrice=${Math.round(testPrice)}, calculatedARV=${Math.round(testParams.arv)}`);
+    console.log(`🏠 ARV calculation check: ${Math.round(testPrice)} / 0.7 = ${Math.round(testParams.arv)}`);
     
     const result = calculateHelocROI(askingPrice, annualTax, testParams);
     
@@ -879,8 +878,8 @@ function updateResults() {
       console.log('🏠 Popup: Calculated HELOC target price:', targetPrice);
       
       // Update params with the target price AND calculated ARV for the ROI calculation
-      const calculatedARV = targetPrice + (2 * params.improvements);
-      console.log(`🏠 Final ARV calculation: ${Math.round(targetPrice)} + (2 × ${params.improvements}) = ${Math.round(calculatedARV)}`);
+      const calculatedARV = targetPrice / 0.7;
+      console.log(`🏠 Final ARV calculation: ${Math.round(targetPrice)} / 0.7 = ${Math.round(calculatedARV)}`);
       
       const paramsWithTarget = { 
         ...params, 
