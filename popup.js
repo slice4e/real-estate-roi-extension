@@ -321,12 +321,13 @@ function calculateHelocROI(askingPrice, annualTax, params) {
     purchasePrice = askingPrice;
   }
   
-  const totalHoldingPeriod = params.renovationPeriod + params.seasoningPeriod;
+  // Total holding period: renovation + 1 month for refinancing (seasoning overlaps with renovation)
+  const totalHoldingPeriod = params.renovationPeriod + 1;
   
   // Initial cash investment (all cash purchase)
   const initialCashIn = purchasePrice + params.closingCosts + params.improvements;
   
-  // HELOC holding costs during renovation + seasoning
+  // HELOC holding costs during renovation + seasoning + refinancing (1 extra month)
   const helocMonthlyRate = (params.helocRate / 100) / 12;
   const helocPayments = params.helocTerm * 12;
   const helocMonthlyPayment = (params.helocAmount * helocMonthlyRate * Math.pow(1 + helocMonthlyRate, helocPayments)) / 
@@ -334,17 +335,8 @@ function calculateHelocROI(askingPrice, annualTax, params) {
   const holdingCosts = helocMonthlyPayment * totalHoldingPeriod;
   const totalCashIn = initialCashIn + holdingCosts;
   
-  // Refinance calculations with seasoning period logic
-  let refinanceLoanAmount;
-  if (params.seasoningPeriod < 6) {
-    // Less than 6 months: can refinance up to purchase price OR 70% of ARV, whichever is LOWER
-    const maxBasedOnPurchase = purchasePrice; // Use local purchasePrice, not params.purchasePrice
-    const maxBasedOnARV = params.arv * 0.70;
-    refinanceLoanAmount = Math.min(maxBasedOnPurchase, maxBasedOnARV);
-  } else {
-    // 6 months or more: can refinance up to 70% of ARV
-    refinanceLoanAmount = params.arv * 0.70;
-  }
+  // Refinance calculations - with renovation complete, can refinance up to 70% of ARV
+  const refinanceLoanAmount = params.arv * 0.70;
   
   const refinanceClosingCosts = 5000; // Fixed from original spreadsheet
   const cashOut = refinanceLoanAmount - refinanceClosingCosts;
@@ -468,19 +460,9 @@ function formatResults(calculation, isHeloc) {
         <div style="flex: 1; min-width: 250px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; padding: 10px; font-size: 11px;">
           <strong>Step-by-Step Calculations:</strong><br><br>`;
           
-    // Get the actual refinance loan amount from the calculation (includes seasoning logic)
+    // Get the actual refinance loan amount from the calculation
     const refinanceClosingCosts = 5000;
-    
-    // Calculate the actual refinance loan amount based on seasoning period
-    let actualRefinanceLoanAmount;
-    const seasoningPeriod = parseFloat(document.getElementById('seasoningPeriod')?.value) || 2;
-    if (seasoningPeriod < 6) {
-      const maxBasedOnPurchase = calculation.purchasePrice;
-      const maxBasedOnARV = calculation.arv * 0.70;
-      actualRefinanceLoanAmount = Math.min(maxBasedOnPurchase, maxBasedOnARV);
-    } else {
-      actualRefinanceLoanAmount = calculation.arv * 0.70;
-    }
+    const actualRefinanceLoanAmount = calculation.arv * 0.70;
     
     html += `
       <strong>INITIAL INVESTMENT:</strong><br>
@@ -488,16 +470,14 @@ function formatResults(calculation, isHeloc) {
       - Closing Costs: $1,000<br>
       - Improvements: $${(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts).toLocaleString()}<br>
       - HELOC Payments (${Math.round((calculation.holdingCosts / calculation.helocPayment))} months): $${calculation.holdingCosts.toLocaleString()}<br>
+      <small style="color: #666;">  * Includes renovation + 1 month for refinancing</small><br>
       <strong>= Total Cash In: $${calculation.totalCashIn.toLocaleString()}</strong><br><br>
       
       <strong>REFINANCE RECOVERY:</strong><br>
       - ARV (After Repair Value): $${calculation.arv.toLocaleString()}<br>
-      - Seasoning Period: ${seasoningPeriod} months<br>
-      ${seasoningPeriod < 6 ? 
-        `- Refinance Limit (<6 months): MIN(Purchase Price: $${calculation.purchasePrice.toLocaleString()}, 70% ARV: $${Math.round(calculation.arv * 0.7).toLocaleString()})<br>` :
-        `- Refinance Limit (>=6 months): 70% of ARV<br>`
-      }
-      - Refinance Loan Amount: $${Math.round(actualRefinanceLoanAmount).toLocaleString()}<br>
+      - Renovation Complete: Property ready for refinance<br>
+      - Refinance Limit: 70% of ARV<br>
+      - Refinance Loan Amount: $${Math.round(calculation.arv * 0.7).toLocaleString()}<br>
       - Refinance Closing Costs: -$${refinanceClosingCosts.toLocaleString()}<br>
       <strong>= Cash Out: $${calculation.cashOut.toLocaleString()}</strong><br><br>
       

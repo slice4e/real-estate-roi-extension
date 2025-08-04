@@ -64,17 +64,19 @@ function extractPropertyData() {
     
     // Fallback: Look for tax info in body text
     if (!annualTax) {
-      const bodyText = document.body.innerText;
-      const taxPattern = /(?:Annual|Yearly)?\s*(?:Property\s+)?Tax(?:es)?:?\s*\$?([\d,]+)/i;
-      const taxMatch = bodyText.match(taxPattern);
-      if (taxMatch) {
-        console.log('🏠 Found tax in body text:', taxMatch[0]);
-        let taxValue = extractNumericValue(taxMatch[1]);
-        if (taxValue && taxValue < 1200) {
-          console.log('🏠 Converting monthly tax from body text to annual:', taxValue, '→', taxValue * 12);
-          taxValue = taxValue * 12;
+      const bodyText = document.body?.innerText;
+      if (bodyText) {
+        const taxPattern = /(?:Annual|Yearly)?\s*(?:Property\s+)?Tax(?:es)?:?\s*\$?([\d,]+)/i;
+        const taxMatch = bodyText.match(taxPattern);
+        if (taxMatch) {
+          console.log('🏠 Found tax in body text:', taxMatch[0]);
+          let taxValue = extractNumericValue(taxMatch[1]);
+          if (taxValue && taxValue < 1200) {
+            console.log('🏠 Converting monthly tax from body text to annual:', taxValue, '→', taxValue * 12);
+            taxValue = taxValue * 12;
+          }
+          annualTax = taxValue;
         }
-        annualTax = taxValue;
       }
     }
     
@@ -129,7 +131,7 @@ function extractPropertyData() {
             let mostRecentYear = 0;
             
             for (const row of rows) {
-              const rowText = row.textContent || row.innerText;
+              const rowText = (row.textContent || row.innerText) || '';
               console.log('🏠 Checking tax history row:', rowText);
               
               // Look for year pattern (2024, 2023, etc.)
@@ -170,7 +172,7 @@ function extractPropertyData() {
           const yearPattern = /20\d{2}/g;
           const taxAmountPattern = /\$?([\d,]+)/g;
           
-          const tableText = table.textContent || table.innerText;
+          const tableText = (table.textContent || table.innerText) || '';
           const years = tableText.match(yearPattern);
           
           if (years && years.length > 0) {
@@ -180,7 +182,7 @@ function extractPropertyData() {
             // Try to find tax amount for the most recent year
             const rows = table.querySelectorAll('tr, .tax-year-row, .ds-data-col');
             for (const row of rows) {
-              const rowText = row.textContent || row.innerText;
+              const rowText = (row.textContent || row.innerText) || '';
               if (rowText.includes(mostRecentYear.toString())) {
                 console.log('🏠 Found recent year row:', rowText);
                 const taxMatches = rowText.match(/\$?([\d,]+)/g);
@@ -319,7 +321,7 @@ function extractPropertyData() {
       ];
       
       // Get page text but exclude payment calculator sections
-      const pageText = document.body.textContent || document.body.innerText;
+      const pageText = (document.body?.textContent || document.body?.innerText) || '';
       const excludePattern = /(monthly\s+payment|mortgage\s+payment|estimated\s+monthly)/gi;
       
       // Split into sections and exclude payment-related sections
@@ -352,7 +354,7 @@ function extractPropertyData() {
       
       for (const table of tables) {
         // First, look for Zillow's specific "Property taxes" column structure
-        const tableText = table.textContent || table.innerText;
+        const tableText = (table.textContent || table.innerText) || '';
         if (tableText.includes('Property taxes') && tableText.includes('Year')) {
           console.log('🏠 Found table with "Property taxes" column header');
           
@@ -365,7 +367,7 @@ function extractPropertyData() {
           for (const row of rows) {
             const cells = row.querySelectorAll('td, th, [role="cell"], [role="columnheader"]');
             for (let i = 0; i < cells.length; i++) {
-              const cellText = (cells[i].textContent || cells[i].innerText || '').toLowerCase();
+              const cellText = ((cells[i].textContent || cells[i].innerText) || '').toLowerCase();
               if (cellText.includes('property tax')) {
                 propertyTaxColumnIndex = i;
                 headerRow = row;
@@ -389,8 +391,8 @@ function extractPropertyData() {
                 const yearCell = cells[0]; // First column should be year
                 const taxCell = cells[propertyTaxColumnIndex];
                 
-                const yearText = yearCell.textContent || yearCell.innerText;
-                const taxText = taxCell.textContent || taxCell.innerText;
+                const yearText = (yearCell.textContent || yearCell.innerText) || '';
+                const taxText = (taxCell.textContent || taxCell.innerText) || '';
                 
                 const yearMatch = yearText.match(/20\d{2}/);
                 if (yearMatch) {
@@ -465,7 +467,7 @@ function extractPropertyData() {
           console.log('🏠 Trying tax XPath:', xpath);
           const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
           if (result.singleNodeValue) {
-            const taxText = result.singleNodeValue.textContent || result.singleNodeValue.innerText;
+            const taxText = (result.singleNodeValue.textContent || result.singleNodeValue.innerText) || '';
             console.log('🏠 XPath found tax text:', taxText);
             let taxValue = extractNumericValue(taxText);
             if (taxValue && taxValue > 500) {
@@ -508,7 +510,7 @@ function extractPropertyData() {
       });
       
       try {
-        const bodyText = document.body.innerText;
+        const bodyText = document.body?.innerText || '';
         
         // Look for various tax patterns
         const taxPatterns = [
@@ -577,7 +579,7 @@ function extractPropertyData() {
     // Final fallback: Look for tax info in body text with improved patterns
     if (!annualTax) {
       console.log('🏠 Trying improved body text tax extraction...');
-      const bodyText = document.body.innerText;
+      const bodyText = document.body?.innerText || '';
       
       // More specific patterns that are less likely to match monthly payment calculations
       const improvedTaxPatterns = [
