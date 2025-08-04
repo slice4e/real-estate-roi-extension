@@ -499,77 +499,58 @@ class PropertyDataExtractor {
     
     const results = { tax: null, insurance: null };
     
-    // Look for payment calculator sections
-    const calcSections = document.querySelectorAll('*');
+    // Look for payment calculator sections - be more specific
+    const allText = document.body.innerText || document.body.textContent || '';
     
-    for (const section of calcSections) {
-      const sectionText = getSafeText(section);
+    // Look for the specific payment calculator pattern
+    const paymentCalcMatch = allText.match(/Payment calculator[\s\S]*?\$[\d,]+\s*per month[\s\S]*?Principal and interest\s*\$[\d,]+[\s\S]*?Property taxes[\s\S]*?Homeowners insurance/i);
+    
+    if (paymentCalcMatch) {
+      console.log('🏠 Found payment calculator section');
       
-      // Check if this looks like a payment calculator
-      if (sectionText.includes('Payment calculator') || 
-          sectionText.includes('Monthly payment') ||
-          (sectionText.includes('Principal and interest') && sectionText.includes('Property taxes'))) {
-        
-        console.log('🏠 Found payment calculator section');
-        
-        // Extract using line-by-line parsing for better precision
-        const lines = sectionText.split(/[\r\n]+/);
-        
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i].trim();
-          
-          // Look for "Property taxes" followed by amount on next line or same line
-          if (line.toLowerCase().includes('property tax')) {
-            // Check current line for amount
-            const currentLineAmount = line.match(/\$([0-9,]+)/);
-            if (currentLineAmount) {
-              const amount = extractNumericValue(currentLineAmount[1]);
-              if (amount && amount >= 50 && amount <= 2000) { // Reasonable monthly tax range
-                results.tax = convertToAnnualTax(amount);
-                console.log('🏠 Found tax in payment calc (same line):', amount, '→', results.tax);
-              }
-            } else if (i + 1 < lines.length) {
-              // Check next line for amount
-              const nextLineAmount = lines[i + 1].match(/\$([0-9,]+)/);
-              if (nextLineAmount) {
-                const amount = extractNumericValue(nextLineAmount[1]);
-                if (amount && amount >= 50 && amount <= 2000) { // Reasonable monthly tax range
-                  results.tax = convertToAnnualTax(amount);
-                  console.log('🏠 Found tax in payment calc (next line):', amount, '→', results.tax);
-                }
-              }
-            }
+      const calcText = paymentCalcMatch[0];
+      
+      // Extract property taxes with more precise matching
+      const taxPatterns = [
+        /Property taxes[\s\r\n]+\$([0-9,]+)/i,
+        /Property taxes\s*\$([0-9,]+)/i,
+        /Property taxes[\s\S]{1,20}\$([0-9,]+)/i
+      ];
+      
+      for (const pattern of taxPatterns) {
+        const taxMatch = calcText.match(pattern);
+        if (taxMatch) {
+          const amount = extractNumericValue(taxMatch[1]);
+          // Be very specific about tax amounts - should be reasonable monthly tax
+          if (amount && amount >= 100 && amount <= 1500) {
+            results.tax = convertToAnnualTax(amount);
+            console.log('🏠 ✅ Found property tax in payment calc:', amount, '→', results.tax);
+            break;
           }
-          
-          // Look for "Homeowners insurance" 
-          if (line.toLowerCase().includes('homeowner') && line.toLowerCase().includes('insurance')) {
-            // Check current line for amount
-            const currentLineAmount = line.match(/\$([0-9,]+)/);
-            if (currentLineAmount) {
-              const amount = extractNumericValue(currentLineAmount[1]);
-              if (amount && amount >= 30 && amount <= 1000) { // Reasonable monthly insurance range
-                results.insurance = convertToAnnualInsurance(amount, line);
-                console.log('🏠 Found insurance in payment calc (same line):', amount, '→', results.insurance);
-              }
-            } else if (i + 1 < lines.length) {
-              // Check next line for amount
-              const nextLineAmount = lines[i + 1].match(/\$([0-9,]+)/);
-              if (nextLineAmount) {
-                const amount = extractNumericValue(nextLineAmount[1]);
-                if (amount && amount >= 30 && amount <= 1000) { // Reasonable monthly insurance range
-                  results.insurance = convertToAnnualInsurance(amount, line);
-                  console.log('🏠 Found insurance in payment calc (next line):', amount, '→', results.insurance);
-                }
-              }
-            }
-          }
-        }
-        
-        // If we found both, break
-        if (results.tax && results.insurance) {
-          break;
         }
       }
+      
+      // Extract homeowners insurance with more precise matching
+      const insurancePatterns = [
+        /Homeowners insurance[\s\r\n]+\$([0-9,]+)/i,
+        /Homeowners insurance\s*\$([0-9,]+)/i,
+        /Homeowners insurance[\s\S]{1,20}\$([0-9,]+)/i
+      ];
+      
+      for (const pattern of insurancePatterns) {
+        const insuranceMatch = calcText.match(pattern);
+        if (insuranceMatch) {
+          const amount = extractNumericValue(insuranceMatch[1]);
+          // Be specific about insurance amounts - should be reasonable monthly insurance
+          if (amount && amount >= 50 && amount <= 500) {
+            results.insurance = convertToAnnualInsurance(amount, insuranceMatch[0]);
+            console.log('🏠 ✅ Found homeowners insurance in payment calc:', amount, '→', results.insurance);
+            break;
+          }
+        }
+      }
+    } else {
+      console.log('🏠 No payment calculator pattern found in page text');
     }
     
     return results;
