@@ -620,7 +620,11 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Update default ARV when target purchase price changes (HELOC strategy only)
       if (currentStrategy === 'heloc' && fieldId === 'targetPurchasePriceHeloc') {
-        updateDefaultARV();
+        const purchasePrice = parseFloat(this.value) || 0;
+        if (purchasePrice > 0) {
+          console.log('🏠 Purchase price manually changed to:', purchasePrice);
+          updateDefaultARV(purchasePrice, false); // Use new purchase price, but respect user ARV if set
+        }
       }
       
       if (currentData) {
