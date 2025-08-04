@@ -4,12 +4,20 @@ let currentData = null;
 let currentStrategy = 'conventional';
 
 function getFormParameters() {
+  // Get the appropriate target price field based on current strategy
+  const targetPriceFieldId = currentStrategy === 'conventional' ? 'targetPurchasePriceConventional' : 'targetPurchasePriceHeloc';
+  const targetPriceFieldValue = document.getElementById(targetPriceFieldId).value;
+  const targetPriceNumber = parseFloat(targetPriceFieldValue);
+  console.log('🏠 Popup: Target price field ID:', targetPriceFieldId);
+  console.log('🏠 Popup: Target price field value:', targetPriceFieldValue);
+  console.log('🏠 Popup: Target price number:', targetPriceNumber);
+  
   const params = {
     rent: parseFloat(document.getElementById('rent').value) || 1800,
     improvements: parseFloat(document.getElementById('improvements').value) || 10000,
     renovationPeriod: parseFloat(document.getElementById('renovationPeriod').value) || 4,
     targetROI: 10, // Hardcoded to 10%
-    targetPurchasePrice: parseFloat(document.getElementById('targetPurchasePrice').value) || 0, // Changed from null to 0
+    targetPurchasePrice: targetPriceNumber || 0, // Changed from null to 0
     interestRate: parseFloat(document.getElementById('interestRate').value) || 7.5,
     percentDown: parseFloat(document.getElementById('percentDown').value) || 20,
     loanTerm: parseFloat(document.getElementById('loanTerm').value) || 30,
@@ -35,23 +43,24 @@ function populateFormDefaults(strategy) {
   // Get current values for cross-tab sync
   const currentRent = parseFloat(document.getElementById('rent').value) || 0;
   const currentImprovements = parseFloat(document.getElementById('improvements').value) || 0;
+  const currentRenovationPeriod = parseFloat(document.getElementById('renovationPeriod').value) || 0;
   
   // Set strategy-specific defaults
   if (strategy === 'conventional') {
     // Only set defaults if fields are empty (first load)
     if (!currentRent) document.getElementById('rent').value = 1800;
     if (!currentImprovements) document.getElementById('improvements').value = 10000;
-    document.getElementById('renovationPeriod').value = 4;
+    if (!currentRenovationPeriod) document.getElementById('renovationPeriod').value = 4;
     document.getElementById('interestRate').value = 7.5;
     document.getElementById('percentDown').value = 20;
     document.getElementById('closingCosts').value = 5000;
     document.getElementById('insurance').value = 120;
     document.getElementById('otherMisc').value = 200;
   } else {
-    // Preserve rent and improvements values when switching tabs
+    // Preserve rent, improvements, and renovation period values when switching tabs
     if (!currentRent) document.getElementById('rent').value = 1700;
     if (!currentImprovements) document.getElementById('improvements').value = 10000;
-    document.getElementById('renovationPeriod').value = 2;
+    if (!currentRenovationPeriod) document.getElementById('renovationPeriod').value = 4;
     document.getElementById('closingCosts').value = 1000;
     document.getElementById('insurance').value = 75;
     document.getElementById('otherMisc').value = 200;
@@ -61,9 +70,79 @@ function populateFormDefaults(strategy) {
     const improvementsValue = parseFloat(document.getElementById('improvements').value) || 10000;
     document.getElementById('helocAmount').value = improvementsValue;
     document.getElementById('helocTerm').value = 10;
-    document.getElementById('seasoningPeriod').value = 2;
+    
+    // Set seasoning period to match renovation period
+    const renovationPeriodValue = parseFloat(document.getElementById('renovationPeriod').value) || 4;
+    document.getElementById('seasoningPeriod').value = renovationPeriodValue;
+    
     document.getElementById('refinanceRate').value = 7.63;
-    document.getElementById('arv').value = 220000;
+  }
+  
+  // Calculate default ARV only for HELOC strategy: purchase price + 2 × improvements
+  if (strategy === 'heloc') {
+    updateDefaultARV();
+  }
+}
+
+// Function to calculate and update default ARV based on purchase price + 2 × improvements (HELOC strategy only)
+function updateDefaultARV(overridePurchasePrice = null, forceUpdate = false) {
+  // Only calculate ARV for HELOC strategy
+  if (currentStrategy !== 'heloc') {
+    console.log('🏠 ARV calculation skipped - not HELOC strategy');
+    return;
+  }
+  
+  const arvField = document.getElementById('arv');
+  if (!arvField) {
+    console.log('🏠 ARV field not found');
+    return;
+  }
+  
+  const improvements = parseFloat(document.getElementById('improvements').value) || 10000;
+  
+  // Use override price if provided, otherwise get from field or currentData
+  let purchasePrice = 0;
+  if (overridePurchasePrice && overridePurchasePrice > 0) {
+    purchasePrice = overridePurchasePrice;
+    console.log('🏠 Using override purchase price for ARV calculation:', purchasePrice);
+  } else {
+    const targetPurchasePrice = parseFloat(document.getElementById('targetPurchasePriceHeloc').value) || 0;
+    if (targetPurchasePrice > 0) {
+      purchasePrice = targetPurchasePrice;
+      console.log('🏠 Using HELOC target purchase price for ARV calculation:', purchasePrice);
+    } else if (currentData && currentData.price) {
+      purchasePrice = currentData.price;
+      console.log('🏠 Using asking price for ARV calculation:', purchasePrice);
+    } else {
+      console.log('🏠 No purchase price available for ARV calculation');
+      return;
+    }
+  }
+  
+  if (purchasePrice && purchasePrice > 0) {
+    const defaultARV = purchasePrice + (2 * improvements);
+    
+    console.log('🏠 ARV Calculation Details:');
+    console.log('  - Purchase Price:', purchasePrice);
+    console.log('  - Improvements:', improvements);
+    console.log('  - Formula: Purchase Price + (2 × Improvements)');
+    console.log('  - Calculation:', purchasePrice, '+ (2 ×', improvements, ') =', defaultARV);
+    
+    // Only update if ARV field is empty, has the old default value, or if using override price (auto-calculated), or forced
+    const currentARV = parseFloat(arvField.value) || 0;
+    console.log('🏠 Current ARV value:', currentARV, 'Calculated ARV:', defaultARV);
+    
+    if (currentARV === 0 || currentARV === 220000 || overridePurchasePrice || forceUpdate) {
+      arvField.value = Math.round(defaultARV);
+      console.log('🏠 ✅ Updated ARV field to:', Math.round(defaultARV), 
+        overridePurchasePrice ? '(override price provided)' : 
+        forceUpdate ? '(forced update)' : 
+        '(field was empty/default)');
+    } else {
+      console.log('🏠 ❌ ARV field already has user value, not updating:', currentARV);
+    }
+  } else {
+    console.log('🏠 ❌ Invalid purchase price for ARV calculation:', purchasePrice);
   }
 }
 
@@ -107,33 +186,61 @@ function calculateTargetPurchasePriceHeloc(askingPrice, annualTax, params) {
   const targetROI = params.targetROI / 100;
   
   console.log('🏠 Calculating target price for HELOC, targetROI:', targetROI);
+  console.log('🏠 HELOC initial params:', { improvements: params.improvements, helocAmount: params.helocAmount, arv: params.arv });
   
   // Binary search to find the purchase price that yields target ROI
-  let low = askingPrice * 0.5; // Start at 50% of asking
-  let high = askingPrice * 1.2; // Up to 120% of asking
+  let low = askingPrice * 0.3; // Start lower to avoid getting stuck at 50%
+  let high = askingPrice * 1.0; // Don't go above asking price for HELOC strategy
   let bestPrice = askingPrice;
+  let bestROI = 0;
+  
+  console.log(`🏠 HELOC binary search range: low=${Math.round(low)}, high=${Math.round(high)}`);
   
   for (let iterations = 0; iterations < 50; iterations++) {
     const testPrice = (low + high) / 2;
     // Create a copy of params with the test price as a manual override
     const testParams = { ...params, targetPurchasePrice: testPrice };
+    
+    // Calculate ARV for this test price: purchase price + 2 × improvements
+    testParams.arv = testPrice + (2 * params.improvements);
+    
+    console.log(`🏠 HELOC iteration ${iterations}: testPrice=${Math.round(testPrice)}, improvements=${params.improvements}, calculatedARV=${Math.round(testParams.arv)}`);
+    console.log(`🏠 ARV calculation check: ${Math.round(testPrice)} + (2 × ${params.improvements}) = ${Math.round(testParams.arv)}`);
+    
     const result = calculateHelocROI(askingPrice, annualTax, testParams);
     
+    console.log(`🏠 HELOC iteration ${iterations}: ROI=${result.roi.toFixed(2)}%, target=${(targetROI*100).toFixed(2)}%, low=${Math.round(low)}, high=${Math.round(high)}`);
+    
+    // Track the best result
+    if (Math.abs(result.roi / 100 - targetROI) < Math.abs(bestROI / 100 - targetROI)) {
+      bestPrice = testPrice;
+      bestROI = result.roi;
+    }
+    
+    // Check for convergence
     if (Math.abs(result.roi / 100 - targetROI) < 0.001) {
       bestPrice = testPrice;
+      console.log('🏠 HELOC target price found (converged):', Math.round(bestPrice));
       break;
     }
     
+    // Adjust search range
     if (result.roi / 100 < targetROI) {
-      high = testPrice; // Need lower purchase price
+      // ROI is too low, we need a lower purchase price
+      high = testPrice;
     } else {
-      low = testPrice; // Can afford higher purchase price
+      // ROI is too high, we can afford a higher purchase price
+      low = testPrice;
     }
     
-    bestPrice = testPrice;
+    // Check if we've converged on a small range
+    if ((high - low) < 1000) {
+      console.log('🏠 HELOC search range converged, stopping');
+      break;
+    }
   }
   
-  console.log('🏠 Target price calculation result:', bestPrice);
+  console.log('🏠 HELOC target price calculation result:', Math.round(bestPrice), `(${bestROI.toFixed(2)}% ROI)`);
   return bestPrice;
 }
 
@@ -205,15 +312,13 @@ function calculateConventionalROI(askingPrice, annualTax, params) {
 function calculateHelocROI(askingPrice, annualTax, params) {
   // Determine purchase price
   let purchasePrice;
-  let isTargetPrice = false;
   
   if (params.targetPurchasePrice && params.targetPurchasePrice > 0) {
-    // User manually entered a price - use it
+    // User manually entered a price or binary search test price - use it
     purchasePrice = params.targetPurchasePrice;
   } else {
-    // Auto-calculate target price for 10% ROI
-    purchasePrice = calculateTargetPurchasePriceHeloc(askingPrice, annualTax, params);
-    isTargetPrice = true;
+    // Use asking price as fallback
+    purchasePrice = askingPrice;
   }
   
   const totalHoldingPeriod = params.renovationPeriod + params.seasoningPeriod;
@@ -229,8 +334,18 @@ function calculateHelocROI(askingPrice, annualTax, params) {
   const holdingCosts = helocMonthlyPayment * totalHoldingPeriod;
   const totalCashIn = initialCashIn + holdingCosts;
   
-  // Refinance calculations
-  const refinanceLoanAmount = params.arv * 0.70; // 70% LTV typical for investment property
+  // Refinance calculations with seasoning period logic
+  let refinanceLoanAmount;
+  if (params.seasoningPeriod < 6) {
+    // Less than 6 months: can refinance up to purchase price OR 70% of ARV, whichever is LOWER
+    const maxBasedOnPurchase = purchasePrice; // Use local purchasePrice, not params.purchasePrice
+    const maxBasedOnARV = params.arv * 0.70;
+    refinanceLoanAmount = Math.min(maxBasedOnPurchase, maxBasedOnARV);
+  } else {
+    // 6 months or more: can refinance up to 70% of ARV
+    refinanceLoanAmount = params.arv * 0.70;
+  }
+  
   const refinanceClosingCosts = 5000; // Fixed from original spreadsheet
   const cashOut = refinanceLoanAmount - refinanceClosingCosts;
   const finalCashIn = totalCashIn - cashOut;
@@ -245,10 +360,6 @@ function calculateHelocROI(askingPrice, annualTax, params) {
   const monthlyTax = annualTax / 12;
   const monthlyCashFlowWithHeloc = params.rent - mortgagePayment - monthlyTax - 
                                   params.insurance - params.otherMisc - helocMonthlyPayment;
-  
-  // Monthly breakdown (after HELOC paid off)
-  const monthlyCashFlowAfterHeloc = params.rent - mortgagePayment - monthlyTax - 
-                                   params.insurance - params.otherMisc;
   
   const annualCashFlow = monthlyCashFlowWithHeloc * 12;
   const roi = (annualCashFlow / finalCashIn) * 100;
@@ -269,12 +380,10 @@ function calculateHelocROI(askingPrice, annualTax, params) {
     mortgagePayment,
     helocPayment: helocMonthlyPayment,
     monthlyCashFlowWithHeloc,
-    monthlyCashFlowAfterHeloc,
     annualCashFlow,
     roi,
     paybackPeriod,
     holdingCosts,
-    isTargetPrice,
     details: {
       rent: params.rent,
       taxes: monthlyTax,
@@ -292,9 +401,15 @@ function formatResults(calculation, isHeloc) {
       <div class="roi-highlight" style="color: ${roiColor}">
         ${calculation.roi.toFixed(1)}% Annual ROI
       </div>
-      <div class="details">
-        <strong>Purchase:</strong> $${calculation.purchasePrice.toLocaleString()}`;
+      
+      <!-- Side-by-side layout for summary and details -->
+      <div style="display: flex; gap: 20px; margin-top: 15px;">
         
+        <!-- Left side: Summary -->
+        <div style="flex: 1; min-width: 250px;">
+          <div class="details">
+            <strong>Purchase:</strong> $${calculation.purchasePrice.toLocaleString()}`;
+            
   // Show discount info if we have asking price and purchase price differs
   if (calculation.askingPrice && calculation.discountPercent !== undefined) {
     const discountColor = calculation.discountPercent > 0 ? '#2e7d32' : '#d32f2f';
@@ -314,27 +429,131 @@ function formatResults(calculation, isHeloc) {
   }
   
   html += `<br><strong>Holding Costs:</strong> $${calculation.holdingCosts.toLocaleString()}
-           <br><strong>Payback Period:</strong> ${calculation.paybackPeriod.toFixed(1)} years</div>
-    </div>
+           <br><strong>Payback Period:</strong> ${calculation.paybackPeriod.toFixed(1)} years
+          </div>
+          
+          <div class="details" style="margin-top: 15px;">
+            <strong>Monthly Cash Flow:</strong><br>
+            
+            <div class="cash-flow-income">
+              <div style="font-weight: bold;">+ Income:</div>
+              <div style="margin-left: 15px;">
+                + Rent: $${calculation.details.rent}
+              </div>
+            </div>
+            
+            <div class="cash-flow-expenses">
+              <div style="font-weight: bold;">- Expenses:</div>
+              <div style="margin-left: 15px;">
+                - Mortgage: $${Math.round(calculation.mortgagePayment)}<br>
+                - Taxes: $${Math.round(calculation.details.taxes)}<br>
+                - Insurance: $${calculation.details.insurance}<br>
+                - Other: $${calculation.details.other}`;
     
-    <div class="details">
-      <strong>Monthly Cash Flow:</strong><br>
-      - Rent: $${calculation.details.rent}<br>
-      - Mortgage: -$${Math.round(calculation.mortgagePayment)}<br>
-      - Taxes: -$${Math.round(calculation.details.taxes)}<br>
-      - Insurance: -$${calculation.details.insurance}<br>
-      - Other: -$${calculation.details.other}
-  `;
-  
   if (isHeloc) {
-    html += `<br>- HELOC: -$${Math.round(calculation.helocPayment)}
-             <br><strong>Net:</strong> $${Math.round(calculation.monthlyCashFlowWithHeloc)} (with HELOC)
-             <br><strong>Net:</strong> $${Math.round(calculation.monthlyCashFlowAfterHeloc)} (after HELOC paid off)`;
+    html += `<br>                - HELOC: $${Math.round(calculation.helocPayment)}
+              </div>
+            </div>
+            
+            <div class="cash-flow-net ${calculation.monthlyCashFlowWithHeloc >= 0 ? 'cash-flow-positive' : 'cash-flow-negative'}">
+              <div style="font-weight: bold;">= Net Cash Flow:</div>
+              <div style="font-size: 16px; font-weight: bold; color: ${calculation.monthlyCashFlowWithHeloc >= 0 ? '#2e7d32' : '#d32f2f'};">
+                $${Math.round(calculation.monthlyCashFlowWithHeloc)} per month
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Right side: Detailed Calculations -->
+        <div style="flex: 1; min-width: 250px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; padding: 10px; font-size: 11px;">
+          <strong>Step-by-Step Calculations:</strong><br><br>`;
+          
+    // Get the actual refinance loan amount from the calculation (includes seasoning logic)
+    const refinanceClosingCosts = 5000;
+    
+    // Calculate the actual refinance loan amount based on seasoning period
+    let actualRefinanceLoanAmount;
+    const seasoningPeriod = parseFloat(document.getElementById('seasoningPeriod')?.value) || 2;
+    if (seasoningPeriod < 6) {
+      const maxBasedOnPurchase = calculation.purchasePrice;
+      const maxBasedOnARV = calculation.arv * 0.70;
+      actualRefinanceLoanAmount = Math.min(maxBasedOnPurchase, maxBasedOnARV);
+    } else {
+      actualRefinanceLoanAmount = calculation.arv * 0.70;
+    }
+    
+    html += `
+      <strong>INITIAL INVESTMENT:</strong><br>
+      - Purchase Price: $${calculation.purchasePrice.toLocaleString()}<br>
+      - Closing Costs: $1,000<br>
+      - Improvements: $${(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts).toLocaleString()}<br>
+      - HELOC Payments (${Math.round((calculation.holdingCosts / calculation.helocPayment))} months): $${calculation.holdingCosts.toLocaleString()}<br>
+      <strong>= Total Cash In: $${calculation.totalCashIn.toLocaleString()}</strong><br><br>
+      
+      <strong>REFINANCE RECOVERY:</strong><br>
+      - ARV (After Repair Value): $${calculation.arv.toLocaleString()}<br>
+      - Seasoning Period: ${seasoningPeriod} months<br>
+      ${seasoningPeriod < 6 ? 
+        `- Refinance Limit (<6 months): MIN(Purchase Price: $${calculation.purchasePrice.toLocaleString()}, 70% ARV: $${Math.round(calculation.arv * 0.7).toLocaleString()})<br>` :
+        `- Refinance Limit (>=6 months): 70% of ARV<br>`
+      }
+      - Refinance Loan Amount: $${Math.round(actualRefinanceLoanAmount).toLocaleString()}<br>
+      - Refinance Closing Costs: -$${refinanceClosingCosts.toLocaleString()}<br>
+      <strong>= Cash Out: $${calculation.cashOut.toLocaleString()}</strong><br><br>
+      
+      <strong>FINAL INVESTMENT:</strong><br>
+      - Total Cash In: $${calculation.totalCashIn.toLocaleString()}<br>
+      - Cash Out: -$${calculation.cashOut.toLocaleString()}<br>
+      <strong>= Final Cash In: $${calculation.finalCashIn.toLocaleString()}</strong><br><br>
+      
+      <strong>ROI CALCULATION:</strong><br>
+      - Monthly Net Cash Flow: $${Math.round(calculation.monthlyCashFlowWithHeloc)}<br>
+      - Annual Cash Flow: $${Math.round(calculation.annualCashFlow).toLocaleString()}<br>
+      - Final Cash In: $${calculation.finalCashIn.toLocaleString()}<br>
+      <strong>= ROI: $${Math.round(calculation.annualCashFlow).toLocaleString()} / $${calculation.finalCashIn.toLocaleString()} = ${calculation.roi.toFixed(1)}%</strong>`;
   } else {
-    html += `<br><strong>Net:</strong> $${Math.round(calculation.monthlyCashFlow)}`;
+    html += `
+              </div>
+            </div>
+            
+            <div class="cash-flow-net ${calculation.monthlyCashFlow >= 0 ? 'cash-flow-positive' : 'cash-flow-negative'}">
+              <div style="font-weight: bold;">= Net Cash Flow:</div>
+              <div style="font-size: 16px; font-weight: bold; color: ${calculation.monthlyCashFlow >= 0 ? '#2e7d32' : '#d32f2f'};">
+                $${Math.round(calculation.monthlyCashFlow)} per month
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Right side: Detailed Calculations -->
+        <div style="flex: 1; min-width: 250px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; padding: 10px; font-size: 11px;">
+          <strong>Step-by-Step Calculations:</strong><br><br>
+          
+          <strong>TOTAL INVESTMENT:</strong><br>
+          - Down Payment: $${calculation.downPayment.toLocaleString()}<br>
+          - Closing Costs: $5,000<br>
+          - Improvements: $${(calculation.totalCashIn - calculation.downPayment - 5000 - calculation.holdingCosts).toLocaleString()}<br>
+          - Holding Costs (${Math.round(calculation.holdingCosts / calculation.mortgagePayment)} months): $${calculation.holdingCosts.toLocaleString()}<br>
+          <strong>= Total Cash In: $${calculation.totalCashIn.toLocaleString()}</strong><br><br>
+          
+          <strong>LOAN DETAILS:</strong><br>
+          - Purchase Price: $${calculation.purchasePrice.toLocaleString()}<br>
+          - Down Payment: $${calculation.downPayment.toLocaleString()}<br>
+          - Loan Amount: $${calculation.loanAmount.toLocaleString()}<br>
+          - Monthly Mortgage: $${Math.round(calculation.mortgagePayment)}<br><br>
+          
+          <strong>ROI CALCULATION:</strong><br>
+          - Monthly Net Cash Flow: $${Math.round(calculation.monthlyCashFlow)}<br>
+          - Annual Cash Flow: $${Math.round(calculation.annualCashFlow).toLocaleString()}<br>
+          - Total Cash In: $${calculation.totalCashIn.toLocaleString()}<br>
+          <strong>= ROI: $${Math.round(calculation.annualCashFlow).toLocaleString()} / $${calculation.totalCashIn.toLocaleString()} = ${calculation.roi.toFixed(1)}%</strong>`;
   }
   
-  html += `</div>`;
+  html += `
+        </div>
+      </div>
+    </div>`;
+  
   return html;
 }
 
@@ -344,6 +563,8 @@ document.addEventListener("DOMContentLoaded", () => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
+      
+      const oldStrategy = currentStrategy;
       currentStrategy = tab.dataset.strategy;
       
       // Show/hide HELOC specific fields
@@ -352,6 +573,20 @@ document.addEventListener("DOMContentLoaded", () => {
         helocAdvanced.classList.remove('hidden');
       } else {
         helocAdvanced.classList.add('hidden');
+      }
+      
+      // Show/hide strategy-specific target price fields
+      const conventionalField = document.getElementById('targetPurchasePriceConventional');
+      const helocField = document.getElementById('targetPurchasePriceHeloc');
+      
+      if (currentStrategy === 'conventional') {
+        conventionalField.classList.remove('hidden');
+        helocField.classList.add('hidden');
+        console.log('🏠 Switched to conventional strategy, showing conventional target price field');
+      } else {
+        conventionalField.classList.add('hidden');
+        helocField.classList.remove('hidden');
+        console.log('🏠 Switched to HELOC strategy, showing HELOC target price field');
       }
       
       // Update form defaults for new strategy
@@ -377,28 +612,60 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
   
-  // Target purchase price handling
-  document.getElementById('targetPurchasePrice').addEventListener('input', function() {
-    if (currentData) {
-      updateResults();
-    }
-  });
-  
-  // Clear placeholder styling when user starts typing
-  document.getElementById('targetPurchasePrice').addEventListener('focus', function() {
-    this.style.background = '#ffffff';
-  });
-  
-  document.getElementById('targetPurchasePrice').addEventListener('blur', function() {
-    if (!this.value) {
-      this.style.background = '#f9f9f9';
-      this.placeholder = 'Auto-calculated';
-    }
+  // Target purchase price handling for both strategies
+  ['targetPurchasePriceConventional', 'targetPurchasePriceHeloc'].forEach(fieldId => {
+    document.getElementById(fieldId).addEventListener('input', function() {
+      // Mark as manually entered when user types
+      this.setAttribute('data-user-entered', 'true');
+      this.style.background = '#ffffff';
+      
+      // Update default ARV when target purchase price changes (HELOC strategy only)
+      if (currentStrategy === 'heloc' && fieldId === 'targetPurchasePriceHeloc') {
+        updateDefaultARV();
+      }
+      
+      if (currentData) {
+        updateResults();
+      }
+    });
+    
+    // Clear placeholder styling when user starts typing
+    document.getElementById(fieldId).addEventListener('focus', function() {
+      if (!this.getAttribute('data-user-entered')) {
+        this.style.background = '#ffffff';
+      }
+    });
+    
+    document.getElementById(fieldId).addEventListener('blur', function() {
+      if (!this.value && !this.getAttribute('data-user-entered')) {
+        this.style.background = '#f9f9f9';
+        this.placeholder = 'Auto-calculated';
+      }
+    });
   });
   
   // Calculate button
   document.getElementById('calculate-btn').addEventListener('click', () => {
     updateResults();
+  });
+  
+  // Recalculate target price button
+  document.getElementById('recalculate-target-price').addEventListener('click', () => {
+    const targetPriceFieldId = currentStrategy === 'conventional' ? 'targetPurchasePriceConventional' : 'targetPurchasePriceHeloc';
+    const targetPriceField = document.getElementById(targetPriceFieldId);
+    if (targetPriceField) {
+      // Clear the field and set it to auto-calculate mode
+      targetPriceField.value = '';
+      targetPriceField.style.background = '#f9f9f9';
+      targetPriceField.placeholder = 'Auto-calculated';
+      targetPriceField.removeAttribute('data-user-entered');
+      console.log('🏠 User requested recalculation of target price for strategy:', currentStrategy);
+      
+      // Trigger recalculation
+      if (currentData) {
+        updateResults();
+      }
+    }
   });
   
   // Auto-calculate on key input changes with cross-tab sync
@@ -411,13 +678,34 @@ document.addEventListener("DOMContentLoaded", () => {
         if (improvementsValue > 0 && helocAmountField) {
           helocAmountField.value = improvementsValue;
         }
+        
+        // Update default ARV when improvements change (HELOC strategy only)
+        if (currentStrategy === 'heloc') {
+          updateDefaultARV();
+        }
       }
       
-      // Clear target purchase price so it recalculates for 10% ROI
-      const targetPriceField = document.getElementById('targetPurchasePrice');
-      targetPriceField.value = '';
-      targetPriceField.style.background = '#f9f9f9';
-      targetPriceField.placeholder = 'Auto-calculated';
+      // Special handling for renovation period - update seasoning period automatically
+      if (id === 'renovationPeriod') {
+        const renovationPeriodValue = parseFloat(document.getElementById('renovationPeriod').value) || 0;
+        const seasoningPeriodField = document.getElementById('seasoningPeriod');
+        if (renovationPeriodValue > 0 && seasoningPeriodField) {
+          seasoningPeriodField.value = renovationPeriodValue;
+        }
+      }
+      
+      // Only clear target purchase price if it's currently auto-calculated (not manually entered)
+      const targetPriceFieldId = currentStrategy === 'conventional' ? 'targetPurchasePriceConventional' : 'targetPurchasePriceHeloc';
+      const targetPriceField = document.getElementById(targetPriceFieldId);
+      if (targetPriceField && !targetPriceField.getAttribute('data-user-entered')) {
+        // Field is not manually entered, safe to clear and recalculate
+        targetPriceField.value = '';
+        targetPriceField.style.background = '#f9f9f9';
+        targetPriceField.placeholder = 'Auto-calculated';
+        console.log('🏠 Clearing auto-calculated target price due to input change in:', id);
+      } else if (targetPriceField) {
+        console.log('🏠 Preserving user-entered target price despite input change in:', id);
+      }
       
       if (currentData) {
         updateResults();
@@ -531,9 +819,9 @@ function handleDataReceived(data) {
       <div class="error">
         <strong>No property data found</strong><br><br>
         This could happen if:<br>
-        • The page layout has changed<br>
-        • The page hasn't fully loaded<br>
-        • You're not on a property details page<br><br>
+        - The page layout has changed<br>
+        - The page hasn't fully loaded<br>
+        - You're not on a property details page<br><br>
         <strong>Try:</strong><br>
         1. Reload the page and wait for it to fully load<br>
         2. Make sure you're on a specific property page (not search results)<br>
@@ -593,23 +881,65 @@ function updateResults() {
   const params = getFormParameters();
   
   console.log('🏠 Popup: updateResults called with params:', params);
+  console.log('🏠 Popup: targetPurchasePrice value:', params.targetPurchasePrice);
+  console.log('🏠 Popup: currentStrategy:', currentStrategy);
   
   let calculation;
   if (currentStrategy === 'conventional') {
     calculation = calculateConventionalROI(currentData.price, currentData.annualTax, params);
     output.innerHTML = formatResults(calculation, false);
   } else {
-    calculation = calculateHelocROI(currentData.price, currentData.annualTax, params);
+    // For HELOC, check if we need to calculate target price
+    if (!params.targetPurchasePrice || params.targetPurchasePrice <= 0) {
+      console.log('🏠 Popup: HELOC auto-calculating target price...');
+      // Calculate target price for 10% ROI
+      const targetPrice = calculateTargetPurchasePriceHeloc(currentData.price, currentData.annualTax, params);
+      console.log('🏠 Popup: Calculated HELOC target price:', targetPrice);
+      
+      // Update params with the target price AND calculated ARV for the ROI calculation
+      const calculatedARV = targetPrice + (2 * params.improvements);
+      console.log(`🏠 Final ARV calculation: ${Math.round(targetPrice)} + (2 × ${params.improvements}) = ${Math.round(calculatedARV)}`);
+      
+      const paramsWithTarget = { 
+        ...params, 
+        targetPurchasePrice: targetPrice,
+        arv: calculatedARV // Calculate ARV for final calculation
+      };
+      calculation = calculateHelocROI(currentData.price, currentData.annualTax, paramsWithTarget);
+      // Ensure the calculation knows it's using an auto-calculated target price
+      calculation.isTargetPrice = true;
+      calculation.purchasePrice = targetPrice;
+    } else {
+      console.log('🏠 Popup: HELOC using user-entered price:', params.targetPurchasePrice);
+      // Use user-entered price
+      calculation = calculateHelocROI(currentData.price, currentData.annualTax, params);
+      calculation.isTargetPrice = false;
+      calculation.purchasePrice = params.targetPurchasePrice;
+    }
     output.innerHTML = formatResults(calculation, true);
   }
   
   console.log('🏠 Popup: calculation result:', calculation);
+  console.log('🏠 Popup: isTargetPrice:', calculation.isTargetPrice);
   
   // Update the target purchase price field if it's auto-calculated
   if (calculation.isTargetPrice) {
-    const targetPriceField = document.getElementById('targetPurchasePrice');
+    const targetPriceFieldId = currentStrategy === 'conventional' ? 'targetPurchasePriceConventional' : 'targetPurchasePriceHeloc';
+    const targetPriceField = document.getElementById(targetPriceFieldId);
     const newValue = Math.round(calculation.purchasePrice);
-    console.log('🏠 Popup: Updating target price field to:', newValue);
+    console.log('🏠 Popup: Updating target price field', targetPriceFieldId, 'to:', newValue);
     targetPriceField.value = newValue;
+    
+    // Mark as auto-calculated (not user-entered)
+    targetPriceField.removeAttribute('data-user-entered');
+    targetPriceField.style.background = '#f9f9f9';
+    
+    // Update ARV after target purchase price is calculated (HELOC strategy only)
+    if (currentStrategy === 'heloc') {
+      // Pass the calculated purchase price directly and force update to avoid timing issues
+      updateDefaultARV(newValue, true);
+    }
   }
 }
+
+// No longer needed - removed toggleCalculations function
