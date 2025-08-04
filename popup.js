@@ -227,16 +227,18 @@ class FormDefaults {
     Object.entries(defaults).forEach(([key, value]) => {
       if (['rent', 'improvements', 'renovationPeriod'].includes(key)) return;
       
-      // Use extracted insurance value if available
-      if (key === 'insurance' && appState.currentData && appState.currentData.annualInsurance) {
-        const monthlyInsurance = Math.round(appState.currentData.annualInsurance / 12);
-        Utils.setElementValue(FIELD_IDS[key], monthlyInsurance);
-        Utils.logCalculation('Using extracted insurance', { 
-          annual: appState.currentData.annualInsurance, 
-          monthly: monthlyInsurance 
-        });
-      } else if (FIELD_IDS[key]) {
-        Utils.setElementValue(FIELD_IDS[key], value);
+      if (FIELD_IDS[key]) {
+        // Use extracted insurance value if available
+        if (key === 'insurance' && appState.currentData && appState.currentData.annualInsurance) {
+          const monthlyInsurance = Math.round(appState.currentData.annualInsurance / 12);
+          Utils.setElementValue(FIELD_IDS[key], monthlyInsurance);
+          Utils.logCalculation('Using extracted insurance', { 
+            annual: appState.currentData.annualInsurance, 
+            monthly: monthlyInsurance 
+          });
+        } else {
+          Utils.setElementValue(FIELD_IDS[key], value);
+        }
       }
     });
     
