@@ -5,14 +5,15 @@ console.log('🏠 Real Estate ROI Extension: Content script loaded');
 function extractPropertyData() {
   console.log('🏠 Starting property data extraction...');
   
-  let price = null;
-  let annualTax = null;
-  
-  // Determine which site we're on
-  const isRedfin = window.location.hostname.includes('redfin.com');
-  const isZillow = window.location.hostname.includes('zillow.com');
-  
-  console.log('🏠 Site detection:', { isRedfin, isZillow });
+  try {
+    let price = null;
+    let annualTax = null;
+    
+    // Determine which site we're on
+    const isRedfin = window.location.hostname.includes('redfin.com');
+    const isZillow = window.location.hostname.includes('zillow.com');
+    
+    console.log('🏠 Site detection:', { isRedfin, isZillow });
   
   if (isRedfin) {
     // Redfin price extraction with multiple selectors
@@ -668,6 +669,15 @@ function extractPropertyData() {
   }
   
   return result;
+  
+  } catch (error) {
+    console.error('🏠 ❌ Extraction error:', error);
+    return { 
+      price: null, 
+      annualTax: null, 
+      error: 'Extraction failed: ' + error.message 
+    };
+  }
 }
 
 // Enhanced numeric value extraction with better tax handling
