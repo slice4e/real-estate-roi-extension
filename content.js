@@ -225,6 +225,122 @@ function detectSite() {
 }
 
 // =====================================================
+// PAGE CONTENT LOADER (handles lazy loading)
+// =====================================================
+
+class PageContentLoader {
+  static async ensureContentLoaded() {
+    console.log('🏠 Ensuring all page content is loaded...');
+    
+    // First, scroll through the page to trigger lazy loading
+    await this.scrollThroughPage();
+    
+    // Then wait for any dynamic content to settle
+    await this.waitForContentStabilization();
+    
+    console.log('🏠 Page content loading complete');
+  }
+  
+  static async scrollThroughPage() {
+    return new Promise((resolve) => {
+      console.log('🏠 Auto-scrolling to load lazy content...');
+      
+      const scrollHeight = document.documentElement.scrollHeight;
+      const viewportHeight = window.innerHeight;
+      let currentPosition = 0;
+      const scrollStep = viewportHeight * 0.7; // Scroll 70% of viewport each time
+      
+      const scrollInterval = setInterval(() => {
+        currentPosition += scrollStep;
+        window.scrollTo(0, currentPosition);
+        
+        // If we've reached the bottom, scroll back to top and finish
+        if (currentPosition >= scrollHeight) {
+          setTimeout(() => {
+            window.scrollTo(0, 0); // Return to top
+            clearInterval(scrollInterval);
+            console.log('🏠 Auto-scroll complete');
+            resolve();
+          }, 500);
+        }
+      }, 300); // Wait 300ms between scrolls
+    });
+  }
+  
+  static async waitForContentStabilization() {
+    return new Promise((resolve) => {
+      console.log('🏠 Waiting for content stabilization...');
+      
+      let lastDOMSize = document.querySelectorAll('*').length;
+      let stableCount = 0;
+      
+      const checkStability = setInterval(() => {
+        const currentDOMSize = document.querySelectorAll('*').length;
+        
+        if (currentDOMSize === lastDOMSize) {
+          stableCount++;
+          if (stableCount >= 3) { // DOM stable for 3 checks (1.5 seconds)
+            clearInterval(checkStability);
+            console.log('🏠 Content stabilized');
+            resolve();
+          }
+        } else {
+          stableCount = 0;
+        }
+        
+        lastDOMSize = currentDOMSize;
+      }, 500);
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        clearInterval(checkStability);
+        console.log('🏠 Content stabilization timeout - proceeding anyway');
+        resolve();
+      }, 10000);
+    });
+  }
+  
+  static async waitForSpecificContent() {
+    return new Promise((resolve) => {
+      console.log('🏠 Waiting for payment calculator or tax/insurance elements...');
+      
+      const checkForContent = () => {
+        // Look for payment calculator
+        const hasPaymentCalc = document.body.innerText.includes('Payment calculator') ||
+                              document.body.innerText.includes('Principal and interest');
+        
+        // Look for tax/insurance keywords
+        const hasTaxInfo = /property tax|annual tax|tax amount/i.test(document.body.innerText);
+        const hasInsuranceInfo = /homeowners insurance|home insurance|property insurance/i.test(document.body.innerText);
+        
+        if (hasPaymentCalc || (hasTaxInfo && hasInsuranceInfo)) {
+          console.log('🏠 Found expected content elements');
+          resolve();
+          return true;
+        }
+        return false;
+      };
+      
+      // Check immediately
+      if (checkForContent()) return;
+      
+      // Check every 500ms for up to 8 seconds
+      let attempts = 0;
+      const contentCheck = setInterval(() => {
+        attempts++;
+        if (checkForContent() || attempts >= 16) {
+          clearInterval(contentCheck);
+          if (attempts >= 16) {
+            console.log('🏠 Content check timeout - proceeding with extraction');
+          }
+          resolve();
+        }
+      }, 500);
+    });
+  }
+}
+
+// =====================================================
 // EXTRACTION STRATEGIES
 // =====================================================
 
@@ -745,8 +861,17 @@ class PropertyDataExtractor {
 // MAIN EXTRACTION FUNCTION
 // =====================================================
 
-function extractPropertyData() {
+async function extractPropertyData() {
   try {
+    console.log('🏠 Starting enhanced property data extraction...');
+    
+    // Ensure all content is loaded before extraction
+    await PageContentLoader.ensureContentLoaded();
+    
+    // Additional wait for specific content
+    await PageContentLoader.waitForSpecificContent();
+    
+    // Now extract data
     const extractor = new PropertyDataExtractor();
     return extractor.extract();
   } catch (error) {
@@ -768,14 +893,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('🏠 Received message:', request);
   
   if (request.type === "getListingData") {
-    try {
-      const data = extractPropertyData();
+    // Handle async extraction
+    extractPropertyData().then((data) => {
       console.log('🏠 Sending data to popup:', data);
       sendResponse(data);
-    } catch (error) {
+    }).catch((error) => {
       console.error('🏠 Error extracting data:', error);
       sendResponse({ error: error.message });
-    }
+    });
+    
+    return true; // Keep message channel open for async response
   }
   
   return true;
