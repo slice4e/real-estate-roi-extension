@@ -84,6 +84,20 @@ const SELECTORS = {
       '.insurance-container .Text-c11n-8-84-3__sc-aiai24-0',
       '.home-insurance-container .Text-c11n-8-84-3__sc-aiai24-0',
       '[class*="insurance"] .Text-c11n-8-84-3__sc-aiai24-0'
+    ],
+    rent: [
+      '[data-testid="rent-zestimate"] span',
+      '[data-testid="rent-zestimate"] .Text-c11n-8-84-3__sc-aiai24-0',
+      '[data-testid="rental-estimate"] span',
+      '[data-testid="rental-estimate"] .Text-c11n-8-84-3__sc-aiai24-0',
+      '[class*="rent" i] .Text-c11n-8-84-3__sc-aiai24-0',
+      '[class*="rental" i] .Text-c11n-8-84-3__sc-aiai24-0',
+      '[class*="zestimate" i] .Text-c11n-8-84-3__sc-aiai24-0',
+      '[data-testid="property-details"] [class*="rent"] span',
+      '[data-testid="home-details"] [class*="rent"] span',
+      '[data-testid="facts-and-features"] [class*="rent"] span',
+      '.rent-estimate-container .Text-c11n-8-84-3__sc-aiai24-0',
+      '.rental-estimate-container .Text-c11n-8-84-3__sc-aiai24-0'
     ]
   }
 };
@@ -134,8 +148,27 @@ const INSURANCE_PATTERNS = [
   /insurance\s*[:]*\s*\$([0-9,]+)/i
 ];
 
+const RENT_PATTERNS = [
+  // Rent Zestimate patterns (most common)
+  /Rent\s+Zestimate\s*[\r\n]+\s*\$([0-9,]+)/i,
+  /Rent\s+Zestimate\s*:?\s*\$([0-9,]+)/i,
+  /Rental\s+estimate\s*:?\s*\$([0-9,]+)/i,
+  /Rent\s+estimate\s*:?\s*\$([0-9,]+)/i,
+  
+  // Monthly rent patterns
+  /Monthly\s+rent\s*:?\s*\$([0-9,]+)/i,
+  /Estimated\s+rent\s*:?\s*\$([0-9,]+)/i,
+  /Rental\s+income\s*:?\s*\$([0-9,]+)/i,
+  /Market\s+rent\s*:?\s*\$([0-9,]+)/i,
+  
+  // Generic rent patterns
+  /rent\s*[:]*\s*\$([0-9,]+)(?:\s*\/\s*mo(?:nth)?)?/i,
+  /rental\s*[:]*\s*\$([0-9,]+)(?:\s*\/\s*mo(?:nth)?)?/i
+];
+
 const TAX_KEYWORDS = ['tax', 'property tax', 'annual tax', 'county tax', 'assessment', 'levy'];
 const INSURANCE_KEYWORDS = ['insurance', 'homeowners insurance', 'home insurance', 'property insurance', 'hazard insurance', 'coverage'];
+const RENT_KEYWORDS = ['rent', 'rental', 'zestimate', 'rent estimate', 'rental estimate', 'monthly rent'];
 const PAYMENT_KEYWORDS = ['monthly', 'payment', 'mortgage', 'principal', 'interest', 'pmi', 'insurance'];
 
 // =====================================================
@@ -169,6 +202,13 @@ function isValidTaxAmount(amount, isAnnual = true) {
   } else {
     return amount >= 50 && amount <= 4000;
   }
+}
+
+function isValidRentAmount(amount) {
+  if (!amount || amount <= 0) return false;
+  
+  // Reasonable monthly rent range for US properties
+  return amount >= 500 && amount <= 15000;
 }
 
 function convertToAnnualTax(taxValue, context = '', propertyPrice = null) {
@@ -424,6 +464,32 @@ class PropertyDataExtractor {
     return null;
   }
 
+  // Extract rent using selectors (Zillow only)
+  extractRentFromSelectors() {
+    if (!this.isZillow) return null;
+    
+    console.log('🏠 Extracting rent from selectors...');
+    
+    for (const selector of this.selectors.rent) {
+      try {
+        const element = document.querySelector(selector);
+        if (element) {
+          const rentText = getSafeText(element);
+          console.log('🏠 Found rent element:', selector, rentText);
+          const rentValue = extractNumericValue(rentText);
+          if (rentValue && isValidRentAmount(rentValue)) {
+            console.log('🏠 ✅ Rent from selector:', rentValue);
+            return rentValue;
+          }
+        }
+      } catch (e) {
+        console.log('🏠 Rent selector error:', selector, e.message);
+      }
+    }
+    
+    return null;
+  }
+
   // Smart search for tax amounts with context validation
   extractTaxFromContext() {
     console.log('🏠 Smart tax search with context validation...');
@@ -532,6 +598,61 @@ class PropertyDataExtractor {
     return null;
   }
 
+  // Smart search for rent amounts with context validation (Zillow only)
+  extractRentFromContext() {
+    if (!this.isZillow) return null;
+    
+    console.log('🏠 Smart rent search with context validation...');
+    
+    const allElements = document.querySelectorAll('*');
+    const potentialRentElements = [];
+    
+    for (const element of allElements) {
+      const text = getSafeText(element);
+      
+      // Skip elements with children (avoid duplicates) or very long text
+      if (element.children.length > 0 || text.length > 100) continue;
+      
+      // Look for dollar amounts that could be rent
+      if (text.includes('$')) {
+        const amount = extractNumericValue(text);
+        if (amount && isValidRentAmount(amount)) {
+          
+          // Check context for rent-related keywords
+          const parentText = getSafeText(element.parentElement).toLowerCase();
+          const contextText = parentText.substring(0, 200);
+          
+          const hasKeyword = RENT_KEYWORDS.some(keyword => contextText.includes(keyword));
+          const isPaymentContext = PAYMENT_KEYWORDS.some(keyword => contextText.includes(keyword));
+          
+          if (hasKeyword && !isPaymentContext) {
+            potentialRentElements.push({
+              amount,
+              context: contextText.substring(0, 100),
+              text: text,
+              priority: contextText.includes('zestimate') ? 2 : 1 // Prioritize Zestimate
+            });
+            console.log('🏠 Found potential rent:', amount, 'Context:', contextText.substring(0, 60));
+          }
+        }
+      }
+    }
+    
+    // Sort by priority (Zestimate first), then by amount (higher rent = more likely correct)
+    potentialRentElements.sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      return b.amount - a.amount;
+    });
+    
+    if (potentialRentElements.length > 0) {
+      const best = potentialRentElements[0];
+      console.log('🏠 ✅ Rent from context search:', best.amount, 'Source:', best.text);
+      return best.amount;
+    }
+    
+    return null;
+  }
+
   // Extract tax using text patterns
   extractTaxFromPatterns() {
     console.log('🏠 Extracting tax from text patterns...');
@@ -601,6 +722,40 @@ class PropertyDataExtractor {
             const annualInsurance = convertToAnnualInsurance(insuranceValue, match[0]);
             console.log('🏠 ✅ Insurance from pattern:', match[0], '→', annualInsurance);
             return annualInsurance;
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  // Extract rent using text patterns (Zillow only)
+  extractRentFromPatterns() {
+    if (!this.isZillow) return null;
+    
+    console.log('🏠 Extracting rent from text patterns...');
+    
+    const searchAreas = [
+      document.querySelector('[data-testid="property-details"]'),
+      document.querySelector('[data-testid="home-details"]'),
+      document.querySelector('.summary-container'),
+      document.querySelector('[data-testid="facts-and-features"]'),
+      document.querySelector('[data-testid="rental-calculator"]'),
+      document.querySelector('[data-testid="rent-zestimate"]'),
+      document.body
+    ].filter(Boolean);
+    
+    for (const area of searchAreas) {
+      const areaText = getSafeText(area);
+      
+      for (const pattern of RENT_PATTERNS) {
+        const match = areaText.match(pattern);
+        if (match) {
+          const rentValue = extractNumericValue(match[1]);
+          if (rentValue && isValidRentAmount(rentValue)) {
+            console.log('🏠 ✅ Rent from pattern:', match[0], '→', rentValue);
+            return rentValue;
           }
         }
       }
@@ -727,7 +882,7 @@ class PropertyDataExtractor {
   extractFromAllPageText() {
     console.log('🏠 Fallback: Scanning all page text for tax/insurance data...');
     
-    const results = { tax: null, insurance: null };
+    const results = { tax: null, insurance: null, rent: null };
     
     // Get all text content from the page
     const allText = document.body.innerText || document.body.textContent || '';
@@ -770,6 +925,27 @@ class PropertyDataExtractor {
       }
     }
     
+    // Look for any dollar amounts with rent-related keywords nearby (Zillow only)
+    if (this.isZillow) {
+      const rentMatches = allText.match(/(?:rent|rental|zestimate|rent estimate|rental estimate)[\s\S]{0,50}\$([0-9,]+)|\$([0-9,]+)[\s\S]{0,50}(?:rent|rental|zestimate|rent estimate|rental estimate)/gi);
+      
+      if (rentMatches) {
+        for (const match of rentMatches) {
+          const amounts = match.match(/\$([0-9,]+)/g);
+          if (amounts) {
+            for (const amountStr of amounts) {
+              const amount = extractNumericValue(amountStr);
+              if (amount && isValidRentAmount(amount) && !results.rent) {
+                results.rent = amount;
+                console.log('🏠 ✅ Rent from full page scan:', results.rent, 'Context:', match.substring(0, 60));
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+    
     return results;
   }
 
@@ -780,6 +956,7 @@ class PropertyDataExtractor {
     let price = this.extractPrice();
     let annualTax = null;
     let annualInsurance = null;
+    let monthlyRent = null;
     
   // Try tax extraction methods in order of reliability
     const taxMethods = [
@@ -814,8 +991,26 @@ class PropertyDataExtractor {
       }
     }
 
+    // Try rent extraction methods (Zillow only)
+    if (this.isZillow) {
+      const rentMethods = [
+        () => this.extractRentFromSelectors(),
+        () => this.extractRentFromContext(),
+        () => this.extractRentFromPatterns()
+      ];
+      
+      for (const method of rentMethods) {
+        try {
+          monthlyRent = method();
+          if (monthlyRent) break;
+        } catch (error) {
+          console.log('🏠 Rent extraction method failed:', error.message);
+        }
+      }
+    }
+
     // Final fallback: comprehensive page text scan
-    if (!annualTax || !annualInsurance) {
+    if (!annualTax || !annualInsurance || (!monthlyRent && this.isZillow)) {
       console.log('🏠 Using comprehensive fallback extraction...');
       try {
         const fallbackResults = this.extractFromAllPageText();
@@ -824,6 +1019,9 @@ class PropertyDataExtractor {
         }
         if (!annualInsurance && fallbackResults.insurance) {
           annualInsurance = fallbackResults.insurance;
+        }
+        if (!monthlyRent && fallbackResults.rent && this.isZillow) {
+          monthlyRent = fallbackResults.rent;
         }
       } catch (error) {
         console.log('🏠 Fallback extraction failed:', error.message);
@@ -849,8 +1047,17 @@ class PropertyDataExtractor {
         }
       }
     }
+
+    // Validate rent amount
+    if (monthlyRent && !isValidRentAmount(monthlyRent)) {
+      console.log('🏠 ⚠️ Warning: Extracted rent amount seems unusual:', monthlyRent);
+      if (monthlyRent > 15000 || monthlyRent < 500) {
+        console.log('🏠 ❌ Rent amount outside reasonable range, likely extracted wrong value.');
+        monthlyRent = null;
+      }
+    }
     
-    const result = { price, annualTax, annualInsurance };
+    const result = { price, annualTax, annualInsurance, monthlyRent };
     console.log('🏠 Final extraction result:', result);
     
     return result;

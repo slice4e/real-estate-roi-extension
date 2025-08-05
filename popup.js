@@ -912,7 +912,8 @@ class UIManager {
     Utils.logCalculation('Property info display', { 
       price: data.price, 
       annualTax: data.annualTax, 
-      annualInsurance: data.annualInsurance 
+      annualInsurance: data.annualInsurance,
+      monthlyRent: data.monthlyRent
     });
     
     let html = `<strong>Property:</strong> $${Utils.formatCurrency(data.price)} asking price<br>`;
@@ -928,10 +929,15 @@ class UIManager {
     // Add insurance information
     if (data.annualInsurance && data.annualInsurance > 0 && data.annualInsurance !== (CONFIG.defaults.conventional.insurance * 12)) {
       const monthlyInsurance = Math.round(data.annualInsurance / 12);
-      html += `<strong>Annual Insurance:</strong> $${Utils.formatCurrency(data.annualInsurance)} (~$${monthlyInsurance}/month - extracted)`;
+      html += `<strong>Annual Insurance:</strong> $${Utils.formatCurrency(data.annualInsurance)} (~$${monthlyInsurance}/month - extracted)<br>`;
     } else {
       const defaultAnnual = CONFIG.defaults.conventional.insurance * 12;
-      html += `<strong>Annual Insurance:</strong> <span style="color: ${CONFIG.colors.warning};">~$${Utils.formatCurrency(defaultAnnual)} (default - not found on page)</span>`;
+      html += `<strong>Annual Insurance:</strong> <span style="color: ${CONFIG.colors.warning};">~$${Utils.formatCurrency(defaultAnnual)} (default - not found on page)</span><br>`;
+    }
+    
+    // Add rent information (Zillow only)
+    if (data.monthlyRent && data.monthlyRent > 0) {
+      html += `<strong>Rent Zestimate:</strong> <span style="color: ${CONFIG.colors.good};">$${Utils.formatCurrency(data.monthlyRent)}/month (extracted)</span>`;
     }
     
     propertyInfo.innerHTML = html;
@@ -1265,6 +1271,35 @@ class EventHandlers {
     
     // Set initial form defaults and calculate results
     FormDefaults.populate(appState.currentStrategy);
+    
+    // Auto-populate rent field with extracted rent zestimate if available and field is empty
+    if (data.monthlyRent && data.monthlyRent > 0) {
+      const rentField = Utils.getElement(FIELD_IDS.rent);
+      const currentRent = Utils.getFloatValue(FIELD_IDS.rent);
+      
+      // Only populate if field is empty or contains default value
+      if (!currentRent || 
+          currentRent === CONFIG.defaults.conventional.rent || 
+          currentRent === CONFIG.defaults.heloc.rent) {
+        Utils.setElementValue(FIELD_IDS.rent, data.monthlyRent);
+        rentField.style.background = '#e8f5e8'; // Light green to indicate auto-populated
+        
+        Utils.logCalculation('Auto-populated rent field with Zestimate', {
+          extractedRent: data.monthlyRent,
+          previousValue: currentRent
+        });
+        
+        // Add a temporary visual indicator
+        const originalPlaceholder = rentField.placeholder;
+        rentField.placeholder = 'Auto-filled from Rent Zestimate';
+        setTimeout(() => {
+          if (rentField.placeholder === 'Auto-filled from Rent Zestimate') {
+            rentField.placeholder = originalPlaceholder;
+          }
+        }, 3000);
+      }
+    }
+    
     UIManager.updateResults();
   }
 }
