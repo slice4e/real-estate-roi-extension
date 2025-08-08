@@ -24,5 +24,7 @@
       "matches": ["*://*.redfin.com/*", "*://*.zillow.com/*"],
       "js": ["content.js"]
     }
-  ]
+  ],
+  "homepage_url": "https://github.com/slice4e/real-estate-roi-extension",
+  "privacy_policy": "https://github.com/slice4e/real-estate-roi-extension/blob/main/PRIVACY_POLICY.md"
 }

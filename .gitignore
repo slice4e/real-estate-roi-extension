@@ -1,6 +1,7 @@
 # Chrome Extension specific
 *.crx
 *.pem
+*.zip
 key.pem
 
 # OS generated files
