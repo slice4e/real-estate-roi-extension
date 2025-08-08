@@ -11,6 +11,7 @@ const CONFIG = {
     heloc: 'heloc'
   },
   defaults: {
+    insuranceRate: 0.35, // Default insurance rate percentage
     conventional: {
       rent: 1800,
       improvements: 10000,
@@ -20,6 +21,7 @@ const CONFIG = {
       loanTerm: 30,
       closingCosts: 5000,
       insurance: 120,
+      propertyTaxes: 150,
       otherMisc: 200
     },
     heloc: {
@@ -28,6 +30,7 @@ const CONFIG = {
       renovationPeriod: 4,
       closingCosts: 1000,
       insurance: 75,
+      propertyTaxes: 150,
       otherMisc: 200,
       helocRate: 9.25,
       helocTerm: 10,
@@ -67,6 +70,7 @@ const FIELD_IDS = {
   loanTerm: 'loanTerm',
   closingCosts: 'closingCosts',
   insurance: 'insurance',
+  propertyTaxes: 'propertyTaxes',
   otherMisc: 'otherMisc',
   helocRate: 'helocRate',
   helocAmount: 'helocAmount',
@@ -77,6 +81,125 @@ const FIELD_IDS = {
   targetPurchasePriceConventional: 'targetPurchasePriceConventional',
   targetPurchasePriceHeloc: 'targetPurchasePriceHeloc'
 };
+
+// =====================================================
+// SETTINGS MANAGEMENT
+// =====================================================
+
+class SettingsManager {
+  static STORAGE_KEY = 'roiExtensionSettings';
+  
+  static DEFAULT_SETTINGS = {
+    interestRate: 7.63,
+    helocRate: 9.25,
+    refinanceRate: 7.63,
+    downPayment: 20,
+    insuranceRate: 0.35,
+    propertyTaxes: 150,
+    helocTerm: 10,
+    seasoningPeriod: 6
+  };
+
+  static async loadSettings() {
+    try {
+      const result = await chrome.storage.sync.get(this.STORAGE_KEY);
+      return { ...this.DEFAULT_SETTINGS, ...result[this.STORAGE_KEY] };
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      return this.DEFAULT_SETTINGS;
+    }
+  }
+
+  static async saveSettings(settings) {
+    try {
+      await chrome.storage.sync.set({ [this.STORAGE_KEY]: settings });
+      console.log('Settings saved successfully:', settings);
+      return true;
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      return false;
+    }
+  }
+
+  static async resetSettings() {
+    try {
+      await chrome.storage.sync.remove(this.STORAGE_KEY);
+      console.log('Settings reset to defaults');
+      return this.DEFAULT_SETTINGS;
+    } catch (error) {
+      console.error('Error resetting settings:', error);
+      return this.DEFAULT_SETTINGS;
+    }
+  }
+
+  static populateSettingsForm(settings) {
+    console.log('🏠 Populating settings form with:', settings);
+    
+    // Check if elements exist and set values
+    const fields = [
+      { id: 'defaultInterestRate', value: settings.interestRate },
+      { id: 'defaultHelocRate', value: settings.helocRate },
+      { id: 'defaultRefinanceRate', value: settings.refinanceRate },
+      { id: 'defaultDownPayment', value: settings.downPayment },
+      { id: 'defaultInsuranceRate', value: settings.insuranceRate },
+      { id: 'defaultPropertyTaxes', value: settings.propertyTaxes },
+      { id: 'defaultHelocTerm', value: settings.helocTerm },
+      { id: 'defaultSeasoningPeriod', value: settings.seasoningPeriod }
+    ];
+    
+    fields.forEach(field => {
+      const element = document.getElementById(field.id);
+      if (element) {
+        element.value = field.value;
+        console.log(`🏠 Set ${field.id} = ${field.value}`);
+      } else {
+        console.error(`🏠 Element not found: ${field.id}`);
+      }
+    });
+  }
+
+  static getSettingsFromForm() {
+    const getFloatValue = (id, defaultValue = 0) => {
+      const element = document.getElementById(id);
+      if (element) {
+        const value = parseFloat(element.value);
+        return isNaN(value) ? defaultValue : value;
+      }
+      return defaultValue;
+    };
+    
+    const settings = {
+      interestRate: getFloatValue('defaultInterestRate', 7.63),
+      helocRate: getFloatValue('defaultHelocRate', 9.25),
+      refinanceRate: getFloatValue('defaultRefinanceRate', 7.63),
+      downPayment: getFloatValue('defaultDownPayment', 20),
+      insuranceRate: getFloatValue('defaultInsuranceRate', 0.35),
+      propertyTaxes: getFloatValue('defaultPropertyTaxes', 150),
+      helocTerm: getFloatValue('defaultHelocTerm', 10),
+      seasoningPeriod: getFloatValue('defaultSeasoningPeriod', 6)
+    };
+    
+    console.log('🏠 Settings collected from form:', settings);
+    return settings;
+  }
+
+  static updateConfigWithSettings(settings) {
+    // Update CONFIG.defaults with user settings
+    CONFIG.defaults.conventional.interestRate = settings.interestRate;
+    CONFIG.defaults.conventional.percentDown = settings.downPayment;
+    CONFIG.defaults.conventional.propertyTaxes = settings.propertyTaxes;
+    CONFIG.defaults.heloc.helocRate = settings.helocRate;
+    CONFIG.defaults.heloc.helocTerm = settings.helocTerm;
+    CONFIG.defaults.heloc.refinanceRate = settings.refinanceRate;
+    CONFIG.defaults.heloc.propertyTaxes = settings.propertyTaxes;
+    
+    // Store insurance rate for dynamic calculation
+    CONFIG.defaults.insuranceRate = settings.insuranceRate;
+    
+    // Update thresholds that might be configurable
+    CONFIG.thresholds.seasoningMonths = settings.seasoningPeriod;
+  }
+}
 
 // =====================================================
 // UTILITY FUNCTIONS
@@ -184,6 +307,7 @@ class FormParameters {
       loanTerm: Utils.getFloatValue(FIELD_IDS.loanTerm, CONFIG.defaults.conventional.loanTerm),
       closingCosts: Utils.getFloatValue(FIELD_IDS.closingCosts, CONFIG.defaults[this.strategy].closingCosts),
       insurance: Utils.getFloatValue(FIELD_IDS.insurance, CONFIG.defaults[this.strategy].insurance),
+      propertyTaxes: Utils.getFloatValue(FIELD_IDS.propertyTaxes, CONFIG.defaults[this.strategy].propertyTaxes),
       otherMisc: Utils.getFloatValue(FIELD_IDS.otherMisc, CONFIG.defaults[this.strategy].otherMisc)
     };
 
@@ -215,6 +339,8 @@ class FormDefaults {
     const currentRent = Utils.getFloatValue(FIELD_IDS.rent);
     const currentImprovements = Utils.getFloatValue(FIELD_IDS.improvements);
     const currentRenovationPeriod = Utils.getFloatValue(FIELD_IDS.renovationPeriod);
+    const currentPropertyTaxes = Utils.getFloatValue(FIELD_IDS.propertyTaxes);
+    const currentInsurance = Utils.getFloatValue(FIELD_IDS.insurance);
     
     const defaults = CONFIG.defaults[strategy];
     
@@ -222,23 +348,67 @@ class FormDefaults {
     if (!currentRent) Utils.setElementValue(FIELD_IDS.rent, defaults.rent);
     if (!currentImprovements) Utils.setElementValue(FIELD_IDS.improvements, defaults.improvements);
     if (!currentRenovationPeriod) Utils.setElementValue(FIELD_IDS.renovationPeriod, defaults.renovationPeriod);
+    if (!currentPropertyTaxes) Utils.setElementValue(FIELD_IDS.propertyTaxes, defaults.propertyTaxes);
+    
+    // Handle insurance: use extracted, calculated, or default
+    if (!currentInsurance) {
+      let insuranceValue = defaults.insurance;
+      
+      // If we have property data, try to use calculated insurance
+      if (appState.currentData && appState.currentData.price && appState.currentData.annualInsurance) {
+        insuranceValue = Math.round(appState.currentData.annualInsurance / 12);
+        Utils.logCalculation('Using insurance from property data', { 
+          annual: appState.currentData.annualInsurance, 
+          monthly: insuranceValue 
+        });
+      } else if (appState.currentData && appState.currentData.price) {
+        // Calculate insurance based on property price and rate
+        const insuranceRate = CONFIG.defaults.insuranceRate || SettingsManager.DEFAULT_SETTINGS.insuranceRate;
+        const annualInsurance = Math.round(appState.currentData.price * insuranceRate / 100);
+        insuranceValue = Math.round(annualInsurance / 12);
+        Utils.logCalculation('Using calculated insurance based on rate', { 
+          propertyPrice: appState.currentData.price,
+          insuranceRate: insuranceRate,
+          monthlyInsurance: insuranceValue 
+        });
+      }
+      
+      Utils.setElementValue(FIELD_IDS.insurance, insuranceValue);
+    }
     
     // Set strategy-specific defaults
     Object.entries(defaults).forEach(([key, value]) => {
-      if (['rent', 'improvements', 'renovationPeriod'].includes(key)) return;
+      if (['rent', 'improvements', 'renovationPeriod', 'propertyTaxes', 'insurance'].includes(key)) {
+        // Handle extracted data for taxes and insurance if current values are defaults or empty
+        if (key === 'insurance' && appState.currentData && appState.currentData.annualInsurance) {
+          const currentValue = Utils.getFloatValue(FIELD_IDS[key]);
+          const isDefaultValue = currentValue === defaults.insurance || currentValue === 0;
+          if (isDefaultValue) {
+            const monthlyInsurance = Math.round(appState.currentData.annualInsurance / 12);
+            Utils.setElementValue(FIELD_IDS[key], monthlyInsurance);
+            Utils.logCalculation('Using extracted insurance', { 
+              annual: appState.currentData.annualInsurance, 
+              monthly: monthlyInsurance 
+            });
+          }
+        }
+        else if (key === 'propertyTaxes' && appState.currentData && appState.currentData.annualTax) {
+          const currentValue = Utils.getFloatValue(FIELD_IDS[key]);
+          const isDefaultValue = currentValue === defaults.propertyTaxes || currentValue === 0;
+          if (isDefaultValue) {
+            const monthlyTax = Math.round(appState.currentData.annualTax / 12);
+            Utils.setElementValue(FIELD_IDS[key], monthlyTax);
+            Utils.logCalculation('Using extracted property taxes', { 
+              annual: appState.currentData.annualTax, 
+              monthly: monthlyTax 
+            });
+          }
+        }
+        return;
+      }
       
       if (FIELD_IDS[key]) {
-        // Use extracted insurance value if available
-        if (key === 'insurance' && appState.currentData && appState.currentData.annualInsurance) {
-          const monthlyInsurance = Math.round(appState.currentData.annualInsurance / 12);
-          Utils.setElementValue(FIELD_IDS[key], monthlyInsurance);
-          Utils.logCalculation('Using extracted insurance', { 
-            annual: appState.currentData.annualInsurance, 
-            monthly: monthlyInsurance 
-          });
-        } else {
-          Utils.setElementValue(FIELD_IDS[key], value);
-        }
+        Utils.setElementValue(FIELD_IDS[key], value);
       }
     });
     
@@ -468,8 +638,7 @@ class ConventionalROICalculator {
     const totalCashIn = downPayment + params.closingCosts + params.improvements + holdingCosts;
     
     // Monthly breakdown
-    const monthlyTax = annualTax / 12;
-    const monthlyCashFlow = params.rent - mortgagePayment - monthlyTax - 
+    const monthlyCashFlow = params.rent - mortgagePayment - params.propertyTaxes - 
                            params.insurance - params.otherMisc;
     
     const annualCashFlow = monthlyCashFlow * 12;
@@ -496,7 +665,7 @@ class ConventionalROICalculator {
       isTargetPrice,
       details: {
         rent: params.rent,
-        taxes: monthlyTax,
+        taxes: params.propertyTaxes,
         insurance: params.insurance,
         other: params.otherMisc
       }
@@ -557,8 +726,7 @@ class HelocROICalculator {
     );
     
     // Monthly breakdown (after refinance - HELOC is paid off)
-    const monthlyTax = annualTax / 12;
-    const monthlyCashFlowWithHeloc = params.rent - mortgagePayment - monthlyTax - 
+    const monthlyCashFlowWithHeloc = params.rent - mortgagePayment - params.propertyTaxes - 
                                     params.insurance - params.otherMisc;
     
     const annualCashFlow = monthlyCashFlowWithHeloc * 12;
@@ -588,7 +756,7 @@ class HelocROICalculator {
       renovationPeriod: params.renovationPeriod,
       details: {
         rent: params.rent,
-        taxes: monthlyTax,
+        taxes: params.propertyTaxes,
         insurance: params.insurance,
         other: params.otherMisc
       }
@@ -920,24 +1088,36 @@ class UIManager {
     
     // Add tax information
     if (data.annualTax) {
-      html += `<strong>Annual Taxes:</strong> $${Utils.formatCurrency(data.annualTax)}<br>`;
+      const monthlyTax = Math.round(data.annualTax / 12);
+      html += `<strong>Monthly Property Taxes:</strong> $${monthlyTax} (extracted)<br>`;
     } else {
       const estimatedTax = Math.round(data.price * CONFIG.thresholds.estimatedTaxRate);
-      html += `<strong>Annual Taxes:</strong> <span style="color: ${CONFIG.colors.warning};">~$${Utils.formatCurrency(estimatedTax)} (estimated - tax data not found)</span><br>`;
+      const monthlyEstimatedTax = Math.round(estimatedTax / 12);
+      html += `<strong>Monthly Property Taxes:</strong> <span style="color: ${CONFIG.colors.warning};">~$${monthlyEstimatedTax} (estimated)</span><br>`;
     }
     
     // Add insurance information
-    if (data.annualInsurance && data.annualInsurance > 0 && data.annualInsurance !== (CONFIG.defaults.conventional.insurance * 12)) {
+    if (data.annualInsurance && data.annualInsurance > 0) {
       const monthlyInsurance = Math.round(data.annualInsurance / 12);
-      html += `<strong>Annual Insurance:</strong> $${Utils.formatCurrency(data.annualInsurance)} (~$${monthlyInsurance}/month - extracted)<br>`;
+      
+      // Check if this was extracted vs calculated
+      const insuranceRate = CONFIG.defaults.insuranceRate || SettingsManager.DEFAULT_SETTINGS.insuranceRate;
+      const calculatedAnnual = Math.round(data.price * insuranceRate / 100);
+      const isExtracted = Math.abs(data.annualInsurance - calculatedAnnual) > 50; // Allow some variance
+      
+      if (isExtracted) {
+        html += `<strong>Monthly Insurance:</strong> $${monthlyInsurance} (extracted)<br>`;
+      } else {
+        html += `<strong>Monthly Insurance:</strong> <span style="color: ${CONFIG.colors.warning};">~$${monthlyInsurance} (calculated from ${insuranceRate}% rate)</span><br>`;
+      }
     } else {
-      const defaultAnnual = CONFIG.defaults.conventional.insurance * 12;
-      html += `<strong>Annual Insurance:</strong> <span style="color: ${CONFIG.colors.warning};">~$${Utils.formatCurrency(defaultAnnual)} (default - not found on page)</span><br>`;
+      const defaultMonthly = CONFIG.defaults.conventional.insurance;
+      html += `<strong>Monthly Insurance:</strong> <span style="color: ${CONFIG.colors.warning};">~$${defaultMonthly} (fallback default)</span><br>`;
     }
     
     // Add rent information (Zillow only)
     if (data.monthlyRent && data.monthlyRent > 0) {
-      html += `<strong>Rent Zestimate:</strong> <span style="color: ${CONFIG.colors.good};">$${Utils.formatCurrency(data.monthlyRent)}/month (extracted)</span>`;
+      html += `<strong>Rent Zestimate:</strong> $${Utils.formatCurrency(data.monthlyRent)}/month (extracted)`;
     }
     
     propertyInfo.innerHTML = html;
@@ -954,27 +1134,139 @@ class EventHandlers {
     this.initializeFormInputs();
     this.initializeSpecialFields();
     this.initializeDataExtraction();
+    this.initializeSettings();
   }
   
   static initializeTabSwitching() {
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    console.log('🏠 Initializing tab switching...');
+    
+    const tabs = document.querySelectorAll('.tab');
+    console.log('🏠 Found tabs:', tabs.length);
+    
+    tabs.forEach((tab, index) => {
+      console.log(`🏠 Tab ${index}:`, tab.dataset.strategy, tab.textContent);
+      
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('🏠 Tab clicked:', tab.dataset.strategy);
+        
+        // Remove active class from all tabs
+        tabs.forEach(t => t.classList.remove('active'));
+        // Add active class to clicked tab
         tab.classList.add('active');
         
-        const oldStrategy = appState.currentStrategy;
-        appState.setStrategy(tab.dataset.strategy);
+        const strategy = tab.dataset.strategy;
         
-        Utils.logCalculation('Strategy changed', {
-          from: oldStrategy,
-          to: appState.currentStrategy
-        });
-        
-        this.updateStrategyUI();
-        FormDefaults.populate(appState.currentStrategy);
-        
-        if (appState.currentData) {
-          UIManager.updateResults();
+        if (strategy === 'settings') {
+          console.log('🏠 Showing settings tab');
+          
+          // Hide main form
+          const inputForm = document.getElementById('input-form');
+          const settingsContent = document.getElementById('settings-content');
+          const calculateBtn = document.getElementById('calculate-btn');
+          const outputDiv = document.getElementById('output');
+          
+          if (inputForm) {
+            inputForm.style.display = 'none';
+            console.log('🏠 Hidden input form');
+          }
+          
+          if (outputDiv) {
+            outputDiv.style.display = 'none';
+            console.log('🏠 Hidden output div');
+          }
+          
+          if (settingsContent) {
+            settingsContent.style.display = 'block';
+            settingsContent.style.position = 'relative';
+            settingsContent.style.zIndex = '10';
+            console.log('🏠 Showed settings content');
+            
+            // Ensure all inputs are enabled and focusable
+            const inputs = settingsContent.querySelectorAll('input');
+            inputs.forEach((input, i) => {
+              input.disabled = false;
+              input.readOnly = false;
+              input.style.pointerEvents = 'auto';
+              input.style.userSelect = 'auto';
+              console.log(`🏠 Input ${i} enabled:`, input.id, input.value);
+              
+              // Add test event listeners to verify inputs are working
+              input.addEventListener('focus', () => {
+                console.log('🏠 Input focused:', input.id);
+              });
+              
+              input.addEventListener('input', () => {
+                console.log('🏠 Input changed:', input.id, input.value);
+              });
+              
+              input.addEventListener('blur', () => {
+                console.log('🏠 Input blurred:', input.id, input.value);
+              });
+            });
+          } else {
+            console.error('🏠 Settings content element not found!');
+          }
+          
+          if (calculateBtn) {
+            calculateBtn.style.display = 'none';
+            console.log('🏠 Hidden calculate button');
+          }
+          
+          // Load settings
+          setTimeout(() => {
+            SettingsManager.loadSettings().then(settings => {
+              console.log('🏠 Settings loaded:', settings);
+              SettingsManager.populateSettingsForm(settings);
+            }).catch(error => {
+              console.error('🏠 Error loading settings:', error);
+            });
+          }, 100);
+          
+        } else {
+          console.log('🏠 Showing strategy tab:', strategy);
+          
+          // Show main form, hide settings
+          const inputForm = document.getElementById('input-form');
+          const settingsContent = document.getElementById('settings-content');
+          const calculateBtn = document.getElementById('calculate-btn');
+          const outputDiv = document.getElementById('output');
+          
+          if (settingsContent) {
+            settingsContent.style.display = 'none';
+            console.log('🏠 Hidden settings content');
+          }
+          
+          if (inputForm) {
+            inputForm.style.display = 'block';
+            console.log('🏠 Showed input form');
+          }
+          
+          if (outputDiv) {
+            outputDiv.style.display = 'block';
+            console.log('🏠 Showed output div');
+          }
+          
+          if (calculateBtn) {
+            calculateBtn.style.display = 'block';
+            console.log('🏠 Showed calculate button');
+          }
+          
+          // Handle strategy change
+          const oldStrategy = appState.currentStrategy;
+          appState.setStrategy(strategy);
+          
+          Utils.logCalculation('Strategy changed', {
+            from: oldStrategy,
+            to: appState.currentStrategy
+          });
+          
+          this.updateStrategyUI();
+          FormDefaults.populate(appState.currentStrategy);
+          
+          if (appState.currentData) {
+            UIManager.updateResults();
+          }
         }
       });
     });
@@ -1076,7 +1368,7 @@ class EventHandlers {
   
   static initializeFormInputs() {
     // Auto-calculate on key input changes with cross-tab sync
-    [FIELD_IDS.rent, FIELD_IDS.improvements, FIELD_IDS.renovationPeriod].forEach(fieldId => {
+    [FIELD_IDS.rent, FIELD_IDS.improvements, FIELD_IDS.renovationPeriod, FIELD_IDS.propertyTaxes, FIELD_IDS.insurance].forEach(fieldId => {
       Utils.getElement(fieldId).addEventListener('input', () => {
         this.handleSpecialInputLogic(fieldId);
         this.clearAutoCalculatedTargetPrice();
@@ -1249,11 +1541,16 @@ class EventHandlers {
 
     // Handle missing insurance data
     if (!data.annualInsurance || data.annualInsurance <= 0) {
-      // Use default values if no insurance found
-      data.annualInsurance = CONFIG.defaults.conventional.insurance * 12; // Convert monthly to annual
-      Utils.logCalculation('Using default insurance value', { 
-        defaultMonthly: CONFIG.defaults.conventional.insurance,
-        annualInsurance: data.annualInsurance 
+      // Calculate insurance based on property price and insurance rate setting
+      const insuranceRate = CONFIG.defaults.insuranceRate || SettingsManager.DEFAULT_SETTINGS.insuranceRate;
+      const annualInsuranceFromRate = Math.round(data.price * insuranceRate / 100);
+      data.annualInsurance = annualInsuranceFromRate;
+      
+      Utils.logCalculation('Using calculated insurance based on rate', { 
+        propertyPrice: data.price,
+        insuranceRate: insuranceRate,
+        annualInsurance: data.annualInsurance,
+        monthlyInsurance: Math.round(data.annualInsurance / 12)
       });
     } else {
       Utils.logCalculation('Using extracted insurance value', { 
@@ -1282,25 +1579,149 @@ class EventHandlers {
           currentRent === CONFIG.defaults.conventional.rent || 
           currentRent === CONFIG.defaults.heloc.rent) {
         Utils.setElementValue(FIELD_IDS.rent, data.monthlyRent);
-        rentField.style.background = '#e8f5e8'; // Light green to indicate auto-populated
         
         Utils.logCalculation('Auto-populated rent field with Zestimate', {
           extractedRent: data.monthlyRent,
           previousValue: currentRent
         });
-        
-        // Add a temporary visual indicator
-        const originalPlaceholder = rentField.placeholder;
-        rentField.placeholder = 'Auto-filled from Rent Zestimate';
-        setTimeout(() => {
-          if (rentField.placeholder === 'Auto-filled from Rent Zestimate') {
-            rentField.placeholder = originalPlaceholder;
-          }
-        }, 3000);
       }
     }
     
     UIManager.updateResults();
+  }
+
+  static initializeSettings() {
+    console.log('🏠 Initializing settings system...');
+    
+    // Test if SettingsManager is available
+    if (typeof SettingsManager === 'undefined') {
+      console.error('🏠 SettingsManager class not found!');
+      return;
+    }
+    
+    // Load and apply settings on initialization
+    SettingsManager.loadSettings().then(settings => {
+      SettingsManager.updateConfigWithSettings(settings);
+      Utils.logCalculation('Settings loaded and applied', settings);
+    }).catch(error => {
+      console.error('🏠 Error in settings initialization:', error);
+    });
+
+    // Test settings button
+    const testBtn = document.getElementById('testSettings');
+    if (testBtn) {
+      console.log('🏠 Found test settings button');
+      testBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        console.log('🏠 Test settings clicked');
+        
+        // Test reading all input values
+        const inputs = document.querySelectorAll('#settings-content input');
+        console.log('🏠 Found inputs:', inputs.length);
+        
+        inputs.forEach((input, i) => {
+          console.log(`🏠 Input ${i}:`, {
+            id: input.id,
+            value: input.value,
+            disabled: input.disabled,
+            readOnly: input.readOnly,
+            type: input.type
+          });
+          
+          // Try to programmatically set focus
+          input.focus();
+          setTimeout(() => {
+            input.blur();
+          }, 100);
+        });
+        
+        // Show alert with current values
+        const settings = SettingsManager.getSettingsFromForm();
+        alert('Current form values: ' + JSON.stringify(settings, null, 2));
+      });
+    }
+
+    // Save settings button
+    const saveBtn = document.getElementById('saveSettings');
+    if (saveBtn) {
+      console.log('🏠 Found save settings button');
+      saveBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        console.log('🏠 Save settings clicked');
+        
+        try {
+          const settings = SettingsManager.getSettingsFromForm();
+          const success = await SettingsManager.saveSettings(settings);
+          
+          if (success) {
+            SettingsManager.updateConfigWithSettings(settings);
+            
+            // Show feedback
+            saveBtn.textContent = 'Saved!';
+            saveBtn.style.background = '#2e7d32';
+            setTimeout(() => {
+              saveBtn.textContent = 'Save Settings';
+              saveBtn.style.background = '#4caf50';
+            }, 2000);
+            
+            // Update any visible forms with new defaults
+            if (appState.currentStrategy) {
+              FormDefaults.populate(appState.currentStrategy);
+            }
+            
+            Utils.logCalculation('Settings saved and applied', settings);
+          } else {
+            saveBtn.textContent = 'Error!';
+            saveBtn.style.background = '#d32f2f';
+            setTimeout(() => {
+              saveBtn.textContent = 'Save Settings';
+              saveBtn.style.background = '#4caf50';
+            }, 2000);
+          }
+        } catch (error) {
+          console.error('🏠 Error saving settings:', error);
+        }
+      });
+    } else {
+      console.error('🏠 Save settings button not found');
+    }
+
+    // Reset settings button
+    const resetBtn = document.getElementById('resetSettings');
+    if (resetBtn) {
+      console.log('🏠 Found reset settings button');
+      resetBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        console.log('🏠 Reset settings clicked');
+        
+        if (confirm('Are you sure you want to reset all settings to defaults?')) {
+          try {
+            const settings = await SettingsManager.resetSettings();
+            SettingsManager.populateSettingsForm(settings);
+            SettingsManager.updateConfigWithSettings(settings);
+            
+            // Show feedback
+            resetBtn.textContent = 'Reset!';
+            resetBtn.style.background = '#2e7d32';
+            setTimeout(() => {
+              resetBtn.textContent = 'Reset to Defaults';
+              resetBtn.style.background = '#f44336';
+            }, 2000);
+            
+            // Update any visible forms with reset defaults
+            if (appState.currentStrategy) {
+              FormDefaults.populate(appState.currentStrategy);
+            }
+            
+            Utils.logCalculation('Settings reset to defaults', settings);
+          } catch (error) {
+            console.error('🏠 Error resetting settings:', error);
+          }
+        }
+      });
+    } else {
+      console.error('🏠 Reset settings button not found');
+    }
   }
 }
 
@@ -1309,6 +1730,26 @@ class EventHandlers {
 // =====================================================
 
 document.addEventListener("DOMContentLoaded", () => {
+  console.log('🏠 DOM Content Loaded');
   Utils.logCalculation('Application initializing', {});
+  
+  // Check if key elements exist
+  const elements = {
+    'input-form': document.getElementById('input-form'),
+    'settings-content': document.getElementById('settings-content'),
+    'calculate-btn': document.getElementById('calculate-btn'),
+    'saveSettings': document.getElementById('saveSettings'),
+    'resetSettings': document.getElementById('resetSettings')
+  };
+  
+  console.log('🏠 Element check:', elements);
+  
+  // Check tabs
+  const tabs = document.querySelectorAll('.tab');
+  console.log('🏠 Tabs found:', tabs.length);
+  tabs.forEach((tab, i) => {
+    console.log(`🏠 Tab ${i}:`, tab.dataset.strategy, tab.textContent.trim());
+  });
+  
   EventHandlers.initializeAll();
 });

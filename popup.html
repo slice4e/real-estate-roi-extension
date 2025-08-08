@@ -207,6 +207,97 @@
     .hidden {
       display: none;
     }
+    /* Settings Styles */
+    #settings-content {
+      position: relative;
+      z-index: 1;
+      background: white;
+      padding: 10px;
+    }
+    .form-section {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 5px;
+      border: 1px solid #e0e0e0;
+      position: relative;
+    }
+    .form-section input {
+      pointer-events: auto !important;
+      user-select: auto !important;
+      background: white !important;
+      border: 1px solid #ddd !important;
+      padding: 5px !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      margin-top: 3px;
+    }
+    .form-section input:focus {
+      border-color: #007bff !important;
+      outline: none !important;
+      box-shadow: 0 0 3px rgba(0,123,255,0.3) !important;
+    }
+    .form-section .input-field {
+      margin-bottom: 15px;
+    }
+    .form-section .input-field label {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 3px;
+      color: #333;
+      font-size: 12px;
+    }
+    .form-section h4 {
+      margin: 0 0 10px 0;
+      color: #333;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .settings-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      justify-content: center;
+    }
+    .save-settings-btn, .reset-settings-btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 5px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    .save-settings-btn {
+      background: #4caf50;
+      color: white;
+    }
+    .save-settings-btn:hover {
+      background: #45a049;
+    }
+    .reset-settings-btn {
+      background: #f44336;
+      color: white;
+    }
+    .reset-settings-btn:hover {
+      background: #da190b;
+    }
+    #settings-content h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    #settings-content p {
+      color: #666;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .settings-tab {
+      font-size: 11px;
+      width: 60px;
+      min-width: 60px;
+    }
+    .settings-tab:hover {
+      background: #45a049 !important;
+    }
   </style>
 </head>
 <body>
@@ -217,6 +308,7 @@
   <div class="strategy-tabs">
     <div class="tab active" data-strategy="conventional">Conventional</div>
     <div class="tab" data-strategy="heloc">Cash + HELOC</div>
+    <div class="tab settings-tab" data-strategy="settings">Settings</div>
   </div>
   
   <div id="property-info" class="property-info" style="display: none;"></div>
@@ -281,6 +373,10 @@
           <input type="number" id="insurance" value="120">
         </div>
         <div class="input-field">
+          <label>Monthly Property Taxes</label>
+          <input type="number" id="propertyTaxes" value="150">
+        </div>
+        <div class="input-field">
           <label>Monthly Other/Misc</label>
           <input type="number" id="otherMisc" value="200">
         </div>
@@ -318,6 +414,68 @@
     </div>
 
     <button class="calculate-btn" id="calculate-btn">Calculate ROI</button>
+  </div>
+  
+  <!-- Settings Tab Content (moved outside input-form) -->
+  <div class="tab-content" id="settings-content" style="display: none;">
+    <h3>Default Settings</h3>
+    <p>Configure default values that will persist across sessions:</p>
+    
+    <div class="input-form">
+      <div class="form-section">
+        <h4>Interest Rates</h4>
+        <div class="input-field">
+          <label>Default Interest Rate %</label>
+          <input type="number" id="defaultInterestRate" step="0.125" value="7.63">
+        </div>
+        <div class="input-field">
+          <label>Default HELOC Rate %</label>
+          <input type="number" id="defaultHelocRate" step="0.125" value="9.25">
+        </div>
+        <div class="input-field">
+          <label>Default Refinance Rate %</label>
+          <input type="number" id="defaultRefinanceRate" step="0.125" value="7.63">
+        </div>
+      </div>
+      
+      <div class="form-section">
+        <h4>Down Payment</h4>
+        <div class="input-field">
+          <label>Default Down Payment %</label>
+          <input type="number" id="defaultDownPayment" step="0.1" value="20">
+        </div>
+      </div>
+      
+      <div class="form-section">
+        <h4>Insurance & Taxes</h4>
+        <div class="input-field">
+          <label>Default Insurance Rate %</label>
+          <input type="number" id="defaultInsuranceRate" step="0.01" value="0.35">
+        </div>
+        <div class="input-field">
+          <label>Default Monthly Property Taxes $</label>
+          <input type="number" id="defaultPropertyTaxes" value="150">
+        </div>
+      </div>
+      
+      <div class="form-section">
+        <h4>Other Defaults</h4>
+        <div class="input-field">
+          <label>Default HELOC Term (years)</label>
+          <input type="number" id="defaultHelocTerm" value="10">
+        </div>
+        <div class="input-field">
+          <label>Default Seasoning Period (months)</label>
+          <input type="number" id="defaultSeasoningPeriod" value="6">
+        </div>
+      </div>
+      
+      <div class="settings-buttons">
+        <button type="button" id="testSettings" class="save-settings-btn" style="background: #17a2b8;">Test Inputs</button>
+        <button type="button" id="saveSettings" class="save-settings-btn">Save Settings</button>
+        <button type="button" id="resetSettings" class="reset-settings-btn">Reset to Defaults</button>
+      </div>
+    </div>
   </div>
   
   <div id="output" class="loading">Loading property data...</div>
