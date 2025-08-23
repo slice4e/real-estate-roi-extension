@@ -1034,8 +1034,24 @@ class UIManager {
     const output = Utils.getElement("output");
     output.innerHTML = ResultsFormatter.format(calculation, isHeloc);
     
+    // Show the export button when results are available
+    this.showExportButton();
+    
     // Update the target purchase price field if it's auto-calculated
     this.updateTargetPriceField(calculation);
+  }
+  
+  static showExportButton() {
+    // Only show export button if XLSX library is available
+    if (typeof XLSX !== 'undefined') {
+      const exportBtn = Utils.getElement("export-btn");
+      exportBtn.style.display = "block";
+    }
+  }
+  
+  static hideExportButton() {
+    const exportBtn = Utils.getElement("export-btn");
+    exportBtn.style.display = "none";
   }
   
   static updateTargetPriceField(calculation) {
@@ -1065,11 +1081,13 @@ class UIManager {
   static showError(message) {
     const output = Utils.getElement("output");
     output.innerHTML = `<div class="error">${message}</div>`;
+    this.hideExportButton();
   }
   
   static showLoading(message) {
     const output = Utils.getElement("output");
     output.innerHTML = `<div class="loading">${message}</div>`;
+    this.hideExportButton();
   }
   
   static showPropertyInfo(data) {
@@ -1130,6 +1148,7 @@ class EventHandlers {
     this.initializeAdvancedToggle();
     this.initializeTargetPriceHandling();
     this.initializeCalculateButton();
+    this.initializeExportButton();
     this.initializeRecalculateButton();
     this.initializeFormInputs();
     this.initializeSpecialFields();
@@ -1175,6 +1194,9 @@ class EventHandlers {
             outputDiv.style.display = 'none';
             console.log('🏠 Hidden output div');
           }
+          
+          // Hide the export button in settings mode
+          UIManager.hideExportButton();
           
           if (settingsContent) {
             settingsContent.style.display = 'block';
@@ -1341,6 +1363,26 @@ class EventHandlers {
   static initializeCalculateButton() {
     Utils.getElement('calculate-btn').addEventListener('click', () => {
       UIManager.updateResults();
+    });
+  }
+  
+  static initializeExportButton() {
+    const exportBtn = Utils.getElement('export-btn');
+    
+    // Check if XLSX library is loaded
+    if (typeof XLSX === 'undefined') {
+      console.warn('🏠 XLSX library not available, hiding export button');
+      exportBtn.style.display = 'none';
+      return;
+    }
+    
+    exportBtn.addEventListener('click', () => {
+      const calculation = appState.calculateResults();
+      if (calculation) {
+        ExcelExporter.export(calculation, appState.currentData, appState.currentStrategy);
+      } else {
+        alert('No calculation data available. Please calculate ROI first.');
+      }
     });
   }
   
@@ -1722,6 +1764,318 @@ class EventHandlers {
     } else {
       console.error('🏠 Reset settings button not found');
     }
+  }
+}
+
+// =====================================================
+// EXCEL EXPORT FUNCTIONALITY
+// =====================================================
+
+class ExcelExporter {
+  static export(calculation, propertyData, strategy) {
+    // Check if XLSX library is available
+    if (typeof XLSX === 'undefined') {
+      console.error('🏠 XLSX library not loaded');
+      alert('Excel export library not loaded. Please try reloading the extension.');
+      return;
+    }
+    
+    try {
+      const isHeloc = strategy === CONFIG.strategies.heloc;
+      const strategyName = isHeloc ? 'Cash + HELOC' : 'Conventional';
+      const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      
+      // Summary sheet
+      const summaryData = this.createSummarySheet(calculation, propertyData, strategyName);
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+      
+      // Assumptions & Parameters sheet
+      const assumptionsData = this.createAssumptionsSheet(appState.formParameters, strategyName, isHeloc);
+      const assumptionsWs = XLSX.utils.aoa_to_sheet(assumptionsData);
+      XLSX.utils.book_append_sheet(wb, assumptionsWs, 'Assumptions & Parameters');
+      
+      // Detailed calculations sheet
+      const detailsData = isHeloc 
+        ? this.createHelocDetailsSheet(calculation)
+        : this.createConventionalDetailsSheet(calculation);
+      const detailsWs = XLSX.utils.aoa_to_sheet(detailsData);
+      XLSX.utils.book_append_sheet(wb, detailsWs, 'Detailed Calculations');
+      
+      // Cash flow analysis sheet
+      const cashFlowData = this.createCashFlowSheet(calculation, isHeloc);
+      const cashFlowWs = XLSX.utils.aoa_to_sheet(cashFlowData);
+      XLSX.utils.book_append_sheet(wb, cashFlowWs, 'Cash Flow Analysis');
+      
+      // Generate filename
+      const purchasePrice = Math.round(calculation.purchasePrice / 1000);
+      const roi = calculation.roi.toFixed(1);
+      const filename = `ROI_Analysis_${strategyName.replace(/\s+/g, '_')}_${purchasePrice}k_${roi}pct_${timestamp}.xlsx`;
+      
+      // Download file
+      XLSX.writeFile(wb, filename);
+      
+      Utils.logCalculation('Excel export completed', {
+        strategy: strategyName,
+        filename: filename,
+        roi: roi
+      });
+      
+    } catch (error) {
+      console.error('🏠 Excel export error:', error);
+      alert('Error exporting to Excel. Please try again.');
+    }
+  }
+  
+  static createSummarySheet(calculation, propertyData, strategyName) {
+    const data = [
+      ['Real Estate ROI Analysis - Summary'],
+      ['Generated on:', new Date().toLocaleString()],
+      ['Strategy:', strategyName],
+      [],
+      ['PROPERTY INFORMATION'],
+      ['Asking Price:', this.formatCurrency(calculation.askingPrice || propertyData?.price || 'N/A')],
+      ['Purchase Price:', this.formatCurrency(calculation.purchasePrice)],
+      ['Discount:', calculation.discountPercent ? `${calculation.discountPercent.toFixed(1)}%` : 'N/A'],
+      [],
+      ['KEY RESULTS'],
+      ['Annual ROI:', `${calculation.roi.toFixed(2)}%`],
+      ['Monthly Cash Flow:', this.formatCurrency(calculation.monthlyCashFlowWithHeloc || calculation.monthlyCashFlow)],
+      ['Annual Cash Flow:', this.formatCurrency(calculation.annualCashFlow)],
+      ['Payback Period:', `${calculation.paybackPeriod.toFixed(1)} years`],
+      [],
+      ['INVESTMENT SUMMARY'],
+      ['Total Cash In:', this.formatCurrency(calculation.totalCashIn)]
+    ];
+    
+    if (calculation.cashOut !== undefined) {
+      data.push(['Cash Out (Refinance):', this.formatCurrency(calculation.cashOut)]);
+      data.push(['Final Cash In:', this.formatCurrency(calculation.finalCashIn)]);
+    }
+    
+    data.push(
+      [],
+      ['MONTHLY BREAKDOWN'],
+      ['Rental Income:', this.formatCurrency(calculation.details.rent)],
+      ['Mortgage Payment:', this.formatCurrency(Math.round(calculation.mortgagePayment))],
+      ['Property Taxes:', this.formatCurrency(calculation.details.taxes)],
+      ['Insurance:', this.formatCurrency(calculation.details.insurance)],
+      ['Other Expenses:', this.formatCurrency(calculation.details.other)],
+      ['Net Cash Flow:', this.formatCurrency(calculation.monthlyCashFlowWithHeloc || calculation.monthlyCashFlow)]
+    );
+    
+    return data;
+  }
+  
+  static createAssumptionsSheet(formParameters, strategyName, isHeloc) {
+    const params = formParameters.getAll();
+    
+    const data = [
+      ['Assumptions & Parameters'],
+      ['Strategy:', strategyName],
+      ['Generated on:', new Date().toLocaleString()],
+      [],
+      ['PROPERTY PARAMETERS'],
+      ['Expected Monthly Rent:', this.formatCurrency(params.rent)],
+      ['Remodel Budget:', this.formatCurrency(params.improvements)],
+      ['Remodel Time:', `${params.renovationPeriod} months`],
+      [],
+      ['FINANCING PARAMETERS']
+    ];
+    
+    if (isHeloc) {
+      // HELOC-specific parameters
+      data.push(
+        ['Strategy Type:', 'Cash Purchase + HELOC + Refinance'],
+        ['HELOC Interest Rate:', `${params.helocRate}%`],
+        ['HELOC Amount:', this.formatCurrency(params.helocAmount)],
+        ['HELOC Term:', `${params.helocTerm} years`],
+        ['Seasoning Period:', `${params.seasoningPeriod} months`],
+        ['Refinance Interest Rate:', `${params.refinanceRate}%`],
+        ['ARV (After Repair Value):', this.formatCurrency(params.arv)],
+        [],
+        ['COST ASSUMPTIONS'],
+        ['Initial Closing Costs:', this.formatCurrency(params.closingCosts)],
+        ['Refinance Closing Costs:', this.formatCurrency(CONFIG.thresholds.refinanceClosingCosts)],
+        ['Refinance LTV Limit:', `${(CONFIG.thresholds.refinanceLTV * 100).toFixed(0)}%`]
+      );
+    } else {
+      // Conventional financing parameters
+      data.push(
+        ['Strategy Type:', 'Conventional Financing'],
+        ['Interest Rate:', `${params.interestRate}%`],
+        ['Down Payment:', `${params.percentDown}%`],
+        ['Loan Term:', `${params.loanTerm} years`],
+        [],
+        ['COST ASSUMPTIONS'],
+        ['Closing Costs:', this.formatCurrency(params.closingCosts)]
+      );
+    }
+    
+    // Common monthly expenses for both strategies
+    data.push(
+      [],
+      ['MONTHLY EXPENSES'],
+      ['Property Taxes:', this.formatCurrency(params.propertyTaxes)],
+      ['Insurance:', this.formatCurrency(params.insurance)],
+      ['Other/Miscellaneous:', this.formatCurrency(params.otherMisc)],
+      [],
+      ['CALCULATION ASSUMPTIONS'],
+      ['Target ROI Threshold:', `${CONFIG.thresholds.targetROI}%`],
+      ['Good ROI Threshold:', `${CONFIG.thresholds.goodROI}%`],
+      ['OK ROI Threshold:', `${CONFIG.thresholds.okROI}%`]
+    );
+    
+    // Add target purchase price information
+    const targetPriceField = isHeloc ? 'targetPurchasePriceHeloc' : 'targetPurchasePriceConventional';
+    const targetPrice = params[targetPriceField];
+    
+    if (targetPrice && targetPrice > 0) {
+      data.push(['Target Purchase Price:', this.formatCurrency(targetPrice) + ' (User Specified)']);
+    } else {
+      data.push(['Target Purchase Price:', 'Auto-calculated for ' + CONFIG.thresholds.targetROI + '% ROI']);
+    }
+    
+    // Add current date and time for reference
+    data.push(
+      [],
+      ['EXPORT INFORMATION'],
+      ['Extension Version:', '1.3.0'],
+      ['Export Date:', new Date().toLocaleDateString()],
+      ['Export Time:', new Date().toLocaleTimeString()]
+    );
+    
+    return data;
+  }
+  
+  static createConventionalDetailsSheet(calculation) {
+    return [
+      ['Conventional Financing - Detailed Calculations'],
+      [],
+      ['PURCHASE & FINANCING'],
+      ['Purchase Price:', this.formatCurrency(calculation.purchasePrice)],
+      ['Down Payment:', this.formatCurrency(calculation.downPayment)],
+      ['Loan Amount:', this.formatCurrency(calculation.loanAmount)],
+      ['Monthly Mortgage (P&I):', this.formatCurrency(Math.round(calculation.mortgagePayment))],
+      [],
+      ['TOTAL INVESTMENT BREAKDOWN'],
+      ['Down Payment:', this.formatCurrency(calculation.downPayment)],
+      ['Closing Costs:', this.formatCurrency(5000)], // From the details format
+      ['Improvements:', this.formatCurrency(calculation.totalCashIn - calculation.downPayment - 5000 - calculation.holdingCosts)],
+      ['Holding Costs:', this.formatCurrency(calculation.holdingCosts)],
+      ['Total Cash In:', this.formatCurrency(calculation.totalCashIn)],
+      [],
+      ['MONTHLY INCOME & EXPENSES'],
+      ['Rental Income:', this.formatCurrency(calculation.details.rent)],
+      ['Mortgage Payment:', this.formatCurrency(Math.round(calculation.mortgagePayment))],
+      ['Property Taxes:', this.formatCurrency(calculation.details.taxes)],
+      ['Insurance:', this.formatCurrency(calculation.details.insurance)],
+      ['Other/Misc:', this.formatCurrency(calculation.details.other)],
+      ['Net Monthly Cash Flow:', this.formatCurrency(calculation.monthlyCashFlow)],
+      [],
+      ['ROI CALCULATION'],
+      ['Annual Cash Flow:', this.formatCurrency(calculation.annualCashFlow)],
+      ['Total Investment:', this.formatCurrency(calculation.totalCashIn)],
+      ['ROI Percentage:', `${calculation.roi.toFixed(2)}%`]
+    ];
+  }
+  
+  static createHelocDetailsSheet(calculation) {
+    const totalHoldingPeriod = Math.round(calculation.holdingCosts / calculation.helocPayment);
+    const renovationPeriod = calculation.renovationPeriod;
+    const hasTimeConstraint = renovationPeriod < CONFIG.thresholds.seasoningMonths;
+    
+    return [
+      ['Cash + HELOC Strategy - Detailed Calculations'],
+      [],
+      ['INITIAL INVESTMENT'],
+      ['Purchase Price (Cash):', this.formatCurrency(calculation.purchasePrice)],
+      ['Closing Costs:', this.formatCurrency(1000)],
+      ['Improvements:', this.formatCurrency(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts)],
+      ['HELOC Payments (Holding Period):', this.formatCurrency(calculation.holdingCosts)],
+      ['Total Cash In:', this.formatCurrency(calculation.totalCashIn)],
+      [],
+      ['HELOC DETAILS'],
+      ['Monthly HELOC Payment:', this.formatCurrency(Math.round(calculation.helocPayment))],
+      ['Holding Period:', `${totalHoldingPeriod} months`],
+      ['Renovation Period:', `${renovationPeriod} months`],
+      [],
+      ['REFINANCE ANALYSIS'],
+      ['ARV (After Repair Value):', this.formatCurrency(calculation.arv)],
+      ['Standard 70% LTV Limit:', this.formatCurrency(Math.round(calculation.arv * CONFIG.thresholds.refinanceLTV))],
+      hasTimeConstraint ? ['Time Constraint Limit:', this.formatCurrency(calculation.purchasePrice)] : [],
+      ['Actual Refinance Amount:', this.formatCurrency(Math.round(calculation.refinanceLoanAmount))],
+      ['Refinance Closing Costs:', this.formatCurrency(CONFIG.thresholds.refinanceClosingCosts)],
+      ['Net Cash Out:', this.formatCurrency(calculation.cashOut)],
+      [],
+      ['FINAL INVESTMENT'],
+      ['Total Cash In:', this.formatCurrency(calculation.totalCashIn)],
+      ['Less: Cash Out:', this.formatCurrency(calculation.cashOut)],
+      ['Final Cash In:', this.formatCurrency(calculation.finalCashIn)],
+      [],
+      ['POST-REFINANCE MONTHLY CASH FLOW'],
+      ['Rental Income:', this.formatCurrency(calculation.details.rent)],
+      ['New Mortgage Payment:', this.formatCurrency(Math.round(calculation.mortgagePayment))],
+      ['Property Taxes:', this.formatCurrency(calculation.details.taxes)],
+      ['Insurance:', this.formatCurrency(calculation.details.insurance)],
+      ['Other/Misc:', this.formatCurrency(calculation.details.other)],
+      ['Net Monthly Cash Flow:', this.formatCurrency(calculation.monthlyCashFlowWithHeloc)],
+      [],
+      ['ROI CALCULATION'],
+      ['Annual Cash Flow:', this.formatCurrency(calculation.annualCashFlow)],
+      ['Final Investment:', this.formatCurrency(calculation.finalCashIn)],
+      ['ROI Percentage:', `${calculation.roi.toFixed(2)}%`]
+    ].filter(row => row.length > 0); // Remove empty arrays from time constraint check
+  }
+  
+  static createCashFlowSheet(calculation, isHeloc) {
+    const data = [
+      ['Cash Flow Analysis'],
+      [],
+      ['ANNUAL PROJECTION (12 MONTHS)'],
+      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow']
+    ];
+    
+    const monthlyRent = calculation.details.rent;
+    const monthlyMortgage = Math.round(calculation.mortgagePayment);
+    const monthlyTaxes = calculation.details.taxes;
+    const monthlyInsurance = calculation.details.insurance;
+    const monthlyOther = calculation.details.other;
+    const monthlyCashFlow = Math.round(isHeloc ? calculation.monthlyCashFlowWithHeloc : calculation.monthlyCashFlow);
+    
+    // Add 12 months of data
+    for (let month = 1; month <= 12; month++) {
+      data.push([
+        month,
+        this.formatCurrency(monthlyRent),
+        this.formatCurrency(monthlyMortgage),
+        this.formatCurrency(monthlyTaxes),
+        this.formatCurrency(monthlyInsurance),
+        this.formatCurrency(monthlyOther),
+        this.formatCurrency(monthlyCashFlow)
+      ]);
+    }
+    
+    // Add totals row
+    data.push([
+      'TOTAL',
+      this.formatCurrency(monthlyRent * 12),
+      this.formatCurrency(monthlyMortgage * 12),
+      this.formatCurrency(monthlyTaxes * 12),
+      this.formatCurrency(monthlyInsurance * 12),
+      this.formatCurrency(monthlyOther * 12),
+      this.formatCurrency(monthlyCashFlow * 12)
+    ]);
+    
+    return data;
+  }
+  
+  static formatCurrency(amount) {
+    if (typeof amount === 'string') return amount;
+    return `$${amount.toLocaleString()}`;
   }
 }
 
