@@ -62,6 +62,8 @@ const CONFIG = {
 };
 
 const FIELD_IDS = {
+  askingPrice: 'askingPrice',
+  annualTax: 'annualTax',
   rent: 'rent',
   improvements: 'improvements',
   renovationPeriod: 'renovationPeriod',
@@ -88,16 +90,9 @@ const FIELD_IDS = {
 
 class SettingsManager {
   static STORAGE_KEY = 'roiExtensionSettings';
-  
   static DEFAULT_SETTINGS = {
-    interestRate: 7.63,
-    helocRate: 9.25,
-    refinanceRate: 7.63,
-    downPayment: 20,
-    insuranceRate: 0.35,
-    propertyTaxes: 150,
-    helocTerm: 10,
-    seasoningPeriod: 6
+    interestRate: 7.63, helocRate: 9.25, refinanceRate: 7.63, downPayment: 20,
+    insuranceRate: 0.35, propertyTaxes: 150, helocTerm: 10, seasoningPeriod: 6
   };
 
   static async loadSettings() {
@@ -113,7 +108,6 @@ class SettingsManager {
   static async saveSettings(settings) {
     try {
       await chrome.storage.sync.set({ [this.STORAGE_KEY]: settings });
-      console.log('Settings saved successfully:', settings);
       return true;
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -124,7 +118,6 @@ class SettingsManager {
   static async resetSettings() {
     try {
       await chrome.storage.sync.remove(this.STORAGE_KEY);
-      console.log('Settings reset to defaults');
       return this.DEFAULT_SETTINGS;
     } catch (error) {
       console.error('Error resetting settings:', error);
@@ -133,70 +126,27 @@ class SettingsManager {
   }
 
   static populateSettingsForm(settings) {
-    console.log('🏠 Populating settings form with:', settings);
-    
-    // Check if elements exist and set values
     const fields = [
-      { id: 'defaultInterestRate', value: settings.interestRate },
-      { id: 'defaultHelocRate', value: settings.helocRate },
-      { id: 'defaultRefinanceRate', value: settings.refinanceRate },
-      { id: 'defaultDownPayment', value: settings.downPayment },
-      { id: 'defaultInsuranceRate', value: settings.insuranceRate },
-      { id: 'defaultPropertyTaxes', value: settings.propertyTaxes },
-      { id: 'defaultHelocTerm', value: settings.helocTerm },
-      { id: 'defaultSeasoningPeriod', value: settings.seasoningPeriod }
+      ['defaultInterestRate', settings.interestRate], ['defaultHelocRate', settings.helocRate], ['defaultRefinanceRate', settings.refinanceRate],
+      ['defaultDownPayment', settings.downPayment], ['defaultInsuranceRate', settings.insuranceRate], ['defaultPropertyTaxes', settings.propertyTaxes],
+      ['defaultHelocTerm', settings.helocTerm], ['defaultSeasoningPeriod', settings.seasoningPeriod]
     ];
-    
-    fields.forEach(field => {
-      const element = document.getElementById(field.id);
-      if (element) {
-        element.value = field.value;
-        console.log(`🏠 Set ${field.id} = ${field.value}`);
-      } else {
-        console.error(`🏠 Element not found: ${field.id}`);
-      }
-    });
+    fields.forEach(([id, value]) => Utils.setElementValue(id, value));
   }
 
   static getSettingsFromForm() {
-    const getFloatValue = (id, defaultValue = 0) => {
-      const element = document.getElementById(id);
-      if (element) {
-        const value = parseFloat(element.value);
-        return isNaN(value) ? defaultValue : value;
-      }
-      return defaultValue;
+    const g = (id, def) => Utils.getFloatValue(id, def);
+    return {
+      interestRate: g('defaultInterestRate', 7.63), helocRate: g('defaultHelocRate', 9.25), refinanceRate: g('defaultRefinanceRate', 7.63),
+      downPayment: g('defaultDownPayment', 20), insuranceRate: g('defaultInsuranceRate', 0.35), propertyTaxes: g('defaultPropertyTaxes', 150),
+      helocTerm: g('defaultHelocTerm', 10), seasoningPeriod: g('defaultSeasoningPeriod', 6)
     };
-    
-    const settings = {
-      interestRate: getFloatValue('defaultInterestRate', 7.63),
-      helocRate: getFloatValue('defaultHelocRate', 9.25),
-      refinanceRate: getFloatValue('defaultRefinanceRate', 7.63),
-      downPayment: getFloatValue('defaultDownPayment', 20),
-      insuranceRate: getFloatValue('defaultInsuranceRate', 0.35),
-      propertyTaxes: getFloatValue('defaultPropertyTaxes', 150),
-      helocTerm: getFloatValue('defaultHelocTerm', 10),
-      seasoningPeriod: getFloatValue('defaultSeasoningPeriod', 6)
-    };
-    
-    console.log('🏠 Settings collected from form:', settings);
-    return settings;
   }
 
   static updateConfigWithSettings(settings) {
-    // Update CONFIG.defaults with user settings
-    CONFIG.defaults.conventional.interestRate = settings.interestRate;
-    CONFIG.defaults.conventional.percentDown = settings.downPayment;
-    CONFIG.defaults.conventional.propertyTaxes = settings.propertyTaxes;
-    CONFIG.defaults.heloc.helocRate = settings.helocRate;
-    CONFIG.defaults.heloc.helocTerm = settings.helocTerm;
-    CONFIG.defaults.heloc.refinanceRate = settings.refinanceRate;
-    CONFIG.defaults.heloc.propertyTaxes = settings.propertyTaxes;
-    
-    // Store insurance rate for dynamic calculation
+    Object.assign(CONFIG.defaults.conventional, { interestRate: settings.interestRate, percentDown: settings.downPayment, propertyTaxes: settings.propertyTaxes });
+    Object.assign(CONFIG.defaults.heloc, { helocRate: settings.helocRate, helocTerm: settings.helocTerm, refinanceRate: settings.refinanceRate, propertyTaxes: settings.propertyTaxes });
     CONFIG.defaults.insuranceRate = settings.insuranceRate;
-    
-    // Update thresholds that might be configurable
     CONFIG.thresholds.seasoningMonths = settings.seasoningPeriod;
   }
 }
@@ -205,54 +155,18 @@ class SettingsManager {
 // UTILITY FUNCTIONS
 // =====================================================
 
-class Utils {
-  static getElement(id) {
-    return document.getElementById(id);
-  }
-
-  static getFloatValue(id, defaultValue = 0) {
-    const element = this.getElement(id);
-    return parseFloat(element?.value) || defaultValue;
-  }
-
-  static setElementValue(id, value) {
-    const element = this.getElement(id);
-    if (element) element.value = value;
-  }
-
-  static formatCurrency(amount) {
-    return Math.round(amount).toLocaleString();
-  }
-
-  static getROIColor(roi) {
-    if (roi > CONFIG.thresholds.goodROI) return CONFIG.colors.good;
-    if (roi > CONFIG.thresholds.okROI) return CONFIG.colors.warning;
-    return CONFIG.colors.danger;
-  }
-
-  static isUserEntered(element) {
-    return element?.getAttribute('data-user-entered') === 'true';
-  }
-
-  static markAsUserEntered(element) {
-    if (element) {
-      element.setAttribute('data-user-entered', 'true');
-      element.style.background = '#ffffff';
-    }
-  }
-
-  static markAsAutoCalculated(element) {
-    if (element) {
-      element.removeAttribute('data-user-entered');
-      element.style.background = '#f9f9f9';
-      element.placeholder = 'Auto-calculated';
-    }
-  }
-
-  static logCalculation(context, data) {
-    console.log(`🏠 ${context}:`, data);
-  }
-}
+// Consolidated utility object for brevity and reuse
+const Utils = {
+  getElement: id => document.getElementById(id),
+  getFloatValue: (id, def = 0) => parseFloat(document.getElementById(id)?.value) || def,
+  setElementValue: (id, value) => { const el = document.getElementById(id); if (el) el.value = value; },
+  formatCurrency: a => typeof a === 'string' ? a : `$${Math.round(a).toLocaleString()}`,
+  getROIColor: roi => roi > CONFIG.thresholds.goodROI ? CONFIG.colors.good : roi > CONFIG.thresholds.okROI ? CONFIG.colors.warning : CONFIG.colors.danger,
+  isUserEntered: el => el?.getAttribute('data-user-entered') === 'true',
+  markAsUserEntered: el => { if (el) { el.setAttribute('data-user-entered', 'true'); el.style.background = '#fff'; } },
+  markAsAutoCalculated: el => { if (el) { el.removeAttribute('data-user-entered'); el.style.background = '#f9f9f9'; el.placeholder = 'Auto-calculated'; } },
+  logCalculation: (ctx, data) => { if (window.DEBUG) console.log(`🏠 [${ctx}]`, data); }
+};
 
 // =====================================================
 // MORTGAGE CALCULATIONS
@@ -284,46 +198,23 @@ class FormParameters {
   }
 
   getAll() {
-    const targetPriceFieldId = this.strategy === CONFIG.strategies.conventional 
-      ? FIELD_IDS.targetPurchasePriceConventional 
-      : FIELD_IDS.targetPurchasePriceHeloc;
-    
-    const targetPriceValue = Utils.getFloatValue(targetPriceFieldId);
-    
-    Utils.logCalculation('Getting form parameters', {
-      strategy: this.strategy,
-      targetPriceField: targetPriceFieldId,
-      targetPriceValue
-    });
-    
-    const baseParams = {
-      rent: Utils.getFloatValue(FIELD_IDS.rent, CONFIG.defaults[this.strategy].rent),
-      improvements: Utils.getFloatValue(FIELD_IDS.improvements, CONFIG.defaults[this.strategy].improvements),
-      renovationPeriod: Utils.getFloatValue(FIELD_IDS.renovationPeriod, CONFIG.defaults[this.strategy].renovationPeriod),
+    const s = this.strategy, d = CONFIG.defaults, f = FIELD_IDS, g = Utils.getFloatValue;
+    const base = {
+      askingPrice: g(f.askingPrice, 0),
+      annualTax: g(f.annualTax, 0),
+      rent: g(f.rent, d[s].rent), improvements: g(f.improvements, d[s].improvements), renovationPeriod: g(f.renovationPeriod, d[s].renovationPeriod),
       targetROI: CONFIG.thresholds.targetROI,
-      targetPurchasePrice: targetPriceValue,
-      interestRate: Utils.getFloatValue(FIELD_IDS.interestRate, CONFIG.defaults[this.strategy].interestRate || 7.5),
-      percentDown: Utils.getFloatValue(FIELD_IDS.percentDown, CONFIG.defaults.conventional.percentDown),
-      loanTerm: Utils.getFloatValue(FIELD_IDS.loanTerm, CONFIG.defaults.conventional.loanTerm),
-      closingCosts: Utils.getFloatValue(FIELD_IDS.closingCosts, CONFIG.defaults[this.strategy].closingCosts),
-      insurance: Utils.getFloatValue(FIELD_IDS.insurance, CONFIG.defaults[this.strategy].insurance),
-      propertyTaxes: Utils.getFloatValue(FIELD_IDS.propertyTaxes, CONFIG.defaults[this.strategy].propertyTaxes),
-      otherMisc: Utils.getFloatValue(FIELD_IDS.otherMisc, CONFIG.defaults[this.strategy].otherMisc)
+      targetPurchasePrice: g(s === CONFIG.strategies.conventional ? f.targetPurchasePriceConventional : f.targetPurchasePriceHeloc),
+      targetPurchasePriceConventional: g(f.targetPurchasePriceConventional, 0),
+      targetPurchasePriceHeloc: g(f.targetPurchasePriceHeloc, 0),
+      interestRate: g(f.interestRate, d[s].interestRate || 7.5), percentDown: g(f.percentDown, d.conventional.percentDown), loanTerm: g(f.loanTerm, d.conventional.loanTerm),
+      closingCosts: g(f.closingCosts, d[s].closingCosts), insurance: g(f.insurance, d[s].insurance), propertyTaxes: g(f.propertyTaxes, d[s].propertyTaxes), otherMisc: g(f.otherMisc, d[s].otherMisc)
     };
-
-    // Add HELOC-specific parameters
-    if (this.strategy === CONFIG.strategies.heloc) {
-      Object.assign(baseParams, {
-        helocRate: Utils.getFloatValue(FIELD_IDS.helocRate, CONFIG.defaults.heloc.helocRate),
-        helocAmount: Utils.getFloatValue(FIELD_IDS.helocAmount, baseParams.improvements),
-        helocTerm: Utils.getFloatValue(FIELD_IDS.helocTerm, CONFIG.defaults.heloc.helocTerm),
-        seasoningPeriod: Utils.getFloatValue(FIELD_IDS.seasoningPeriod, baseParams.renovationPeriod),
-        refinanceRate: Utils.getFloatValue(FIELD_IDS.refinanceRate, CONFIG.defaults.heloc.refinanceRate),
-        arv: Utils.getFloatValue(FIELD_IDS.arv, CONFIG.defaults.heloc.defaultARV)
-      });
-    }
-
-    return baseParams;
+    return s === CONFIG.strategies.heloc ? {
+      ...base,
+      helocRate: g(f.helocRate, d.heloc.helocRate), helocAmount: g(f.helocAmount, base.improvements), helocTerm: g(f.helocTerm, d.heloc.helocTerm),
+      seasoningPeriod: g(f.seasoningPeriod, base.renovationPeriod), refinanceRate: g(f.refinanceRate, d.heloc.refinanceRate), arv: g(f.arv, d.heloc.defaultARV)
+    } : base;
   }
 }
 
@@ -771,23 +662,14 @@ class HelocROICalculator {
 class ResultsFormatter {
   static format(calculation, isHeloc) {
     const roiColor = Utils.getROIColor(calculation.roi);
-    
     return `
       <div class="results">
-        <div class="roi-highlight" style="color: ${roiColor}">
-          ${calculation.roi.toFixed(1)}% Annual ROI
-        </div>
-        
-        <!-- Side-by-side layout for summary and details -->
+        <div class="roi-highlight" style="color: ${roiColor}">${calculation.roi.toFixed(1)}% Annual ROI</div>
         <div style="display: flex; gap: 20px; margin-top: 15px;">
-          
-          <!-- Left side: Summary -->
           <div style="flex: 1; min-width: 250px;">
             ${this.formatSummary(calculation, isHeloc)}
             ${this.formatCashFlow(calculation, isHeloc)}
           </div>
-          
-          <!-- Right side: Detailed Calculations -->
           <div style="flex: 1; min-width: 250px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; padding: 10px; font-size: 11px;">
             <strong>Step-by-Step Calculations:</strong><br><br>
             ${isHeloc ? this.formatHelocDetails(calculation) : this.formatConventionalDetails(calculation)}
@@ -797,79 +679,49 @@ class ResultsFormatter {
   }
   
   static formatSummary(calculation, isHeloc) {
-    let html = `
-      <div class="details">
-        <strong>Purchase:</strong> $${Utils.formatCurrency(calculation.purchasePrice)}`;
-        
-    // Show discount info if we have asking price and purchase price differs
-    if (calculation.askingPrice && calculation.discountPercent !== undefined) {
-      const discountColor = calculation.discountPercent > 0 ? CONFIG.colors.good : CONFIG.colors.danger;
-      if (calculation.isTargetPrice) {
-        html += ` <span style="color: ${discountColor}">(${calculation.discountPercent.toFixed(1)}% discount for 10% ROI)</span>`;
-      } else {
-        html += ` <span style="color: ${discountColor}">(${calculation.discountPercent.toFixed(1)}% vs asking $${Utils.formatCurrency(calculation.askingPrice)})</span>`;
-      }
-    }
+    const discountInfo = calculation.askingPrice && calculation.discountPercent !== undefined ? 
+      ` <span style="color: ${calculation.discountPercent > 0 ? CONFIG.colors.good : CONFIG.colors.danger}">
+        (${calculation.discountPercent.toFixed(1)}% ${calculation.isTargetPrice ? 'discount for 10% ROI' : `vs asking ${Utils.formatCurrency(calculation.askingPrice)}`})
+       </span>` : '';
     
-    html += `<br><strong>Total Cash In:</strong> $${Utils.formatCurrency(calculation.totalCashIn)}`;
+    const helocInfo = isHeloc ? `<br><strong>Cash Out (Refinance):</strong> ${Utils.formatCurrency(calculation.cashOut)}
+                                <br><strong>Final Cash In:</strong> ${Utils.formatCurrency(calculation.finalCashIn)}
+                                <br><strong>ARV:</strong> ${Utils.formatCurrency(calculation.arv)}` : '';
     
-    if (isHeloc) {
-      html += `<br><strong>Cash Out (Refinance):</strong> $${Utils.formatCurrency(calculation.cashOut)}
-               <br><strong>Final Cash In:</strong> $${Utils.formatCurrency(calculation.finalCashIn)}
-               <br><strong>ARV:</strong> $${Utils.formatCurrency(calculation.arv)}`;
-    }
-    
-    html += `<br><strong>Holding Costs:</strong> $${Utils.formatCurrency(calculation.holdingCosts)}
-             <br><strong>Payback Period:</strong> ${calculation.paybackPeriod.toFixed(1)} years
-            </div>`;
-            
-    return html;
+    return `<div class="details">
+      <strong>Purchase:</strong> ${Utils.formatCurrency(calculation.purchasePrice)}${discountInfo}
+      <br><strong>Total Cash In:</strong> ${Utils.formatCurrency(calculation.totalCashIn)}${helocInfo}
+      <br><strong>Holding Costs:</strong> ${Utils.formatCurrency(calculation.holdingCosts)}
+      <br><strong>Payback Period:</strong> ${calculation.paybackPeriod.toFixed(1)} years
+    </div>`;
   }
   
   static formatCashFlow(calculation, isHeloc) {
-    const cashFlowField = isHeloc ? 'monthlyCashFlowWithHeloc' : 'monthlyCashFlow';
-    const cashFlow = calculation[cashFlowField];
+    const cashFlow = calculation[isHeloc ? 'monthlyCashFlowWithHeloc' : 'monthlyCashFlow'];
     const cashFlowColor = cashFlow >= 0 ? CONFIG.colors.good : CONFIG.colors.danger;
+    const helocNote = isHeloc ? `<div style="font-size: 10px; color: #666; margin-top: 2px;">(HELOC paid off at refinance)</div>` : '';
     
-    let html = `
-      <div class="details" style="margin-top: 15px;">
-        <strong>Monthly Cash Flow:</strong><br>
-        
-        <div class="cash-flow-income">
-          <div style="font-weight: bold;">+ Income:</div>
-          <div style="margin-left: 15px;">
-            + Rent: $${calculation.details.rent}
-          </div>
+    return `<div class="details" style="margin-top: 15px;">
+      <strong>Monthly Cash Flow:</strong><br>
+      <div class="cash-flow-income">
+        <div style="font-weight: bold;">+ Income:</div>
+        <div style="margin-left: 15px;">+ Rent: $${calculation.details.rent}</div>
+      </div>
+      <div class="cash-flow-expenses">
+        <div style="font-weight: bold;">- Expenses:</div>
+        <div style="margin-left: 15px;">
+          - Mortgage: $${Math.round(calculation.mortgagePayment)}<br>
+          - Taxes: $${Math.round(calculation.details.taxes)}<br>
+          - Insurance: $${calculation.details.insurance}<br>
+          - Other: $${calculation.details.other}
         </div>
-        
-        <div class="cash-flow-expenses">
-          <div style="font-weight: bold;">- Expenses:</div>
-          <div style="margin-left: 15px;">
-            - Mortgage: $${Math.round(calculation.mortgagePayment)}<br>
-            - Taxes: $${Math.round(calculation.details.taxes)}<br>
-            - Insurance: $${calculation.details.insurance}<br>
-            - Other: $${calculation.details.other}
-          </div>
-        </div>
-        
-        <div class="cash-flow-net ${cashFlow >= 0 ? 'cash-flow-positive' : 'cash-flow-negative'}">
-          <div style="font-weight: bold;">= Net Cash Flow${isHeloc ? ' (post-refinance)' : ''}:</div>
-          <div style="font-size: 16px; font-weight: bold; color: ${cashFlowColor};">
-            $${Math.round(cashFlow)} per month
-          </div>`;
-          
-    if (isHeloc) {
-      html += `
-          <div style="font-size: 10px; color: #666; margin-top: 2px;">
-            (HELOC paid off at refinance)
-          </div>`;
-    }
-    
-    html += `
-        </div>
-      </div>`;
-      
-    return html;
+      </div>
+      <div class="cash-flow-net ${cashFlow >= 0 ? 'cash-flow-positive' : 'cash-flow-negative'}">
+        <div style="font-weight: bold;">= Net Cash Flow${isHeloc ? ' (post-refinance)' : ''}:</div>
+        <div style="font-size: 16px; font-weight: bold; color: ${cashFlowColor};">$${Math.round(cashFlow)} per month</div>
+        ${helocNote}
+      </div>
+    </div>`;
   }
   
   static formatHelocDetails(calculation) {
@@ -1030,63 +882,43 @@ class UIManager {
     const calculation = appState.calculateResults();
     if (!calculation) return;
     
-    const isHeloc = appState.currentStrategy === CONFIG.strategies.heloc;
     const output = Utils.getElement("output");
-    output.innerHTML = ResultsFormatter.format(calculation, isHeloc);
-    
-    // Show the export button when results are available
+    output.innerHTML = ResultsFormatter.format(calculation, appState.currentStrategy === CONFIG.strategies.heloc);
     this.showExportButton();
-    
-    // Update the target purchase price field if it's auto-calculated
     this.updateTargetPriceField(calculation);
   }
   
   static showExportButton() {
-    // Only show export button if XLSX library is available
-    if (typeof XLSX !== 'undefined') {
-      const exportBtn = Utils.getElement("export-btn");
-      exportBtn.style.display = "block";
-    }
+    if (typeof XLSX !== 'undefined') Utils.getElement("export-btn").style.display = "block";
   }
   
   static hideExportButton() {
-    const exportBtn = Utils.getElement("export-btn");
-    exportBtn.style.display = "none";
+    Utils.getElement("export-btn").style.display = "none";
   }
   
   static updateTargetPriceField(calculation) {
     if (!calculation.isTargetPrice) return;
     
-    const targetPriceFieldId = appState.currentStrategy === CONFIG.strategies.conventional 
-      ? FIELD_IDS.targetPurchasePriceConventional 
-      : FIELD_IDS.targetPurchasePriceHeloc;
-    
-    const targetPriceField = Utils.getElement(targetPriceFieldId);
+    const fieldId = appState.currentStrategy === CONFIG.strategies.conventional ? 
+      FIELD_IDS.targetPurchasePriceConventional : FIELD_IDS.targetPurchasePriceHeloc;
+    const field = Utils.getElement(fieldId);
     const newValue = Math.round(calculation.purchasePrice);
     
-    Utils.logCalculation('Updating target price field', {
-      fieldId: targetPriceFieldId,
-      value: newValue
-    });
+    field.value = newValue;
+    Utils.markAsAutoCalculated(field);
     
-    targetPriceField.value = newValue;
-    Utils.markAsAutoCalculated(targetPriceField);
-    
-    // Update ARV after target purchase price is calculated (HELOC strategy only)
     if (appState.currentStrategy === CONFIG.strategies.heloc) {
       appState.updateARV(newValue, true);
     }
   }
   
   static showError(message) {
-    const output = Utils.getElement("output");
-    output.innerHTML = `<div class="error">${message}</div>`;
+    Utils.getElement("output").innerHTML = `<div class="error">${message}</div>`;
     this.hideExportButton();
   }
   
   static showLoading(message) {
-    const output = Utils.getElement("output");
-    output.innerHTML = `<div class="loading">${message}</div>`;
+    Utils.getElement("output").innerHTML = `<div class="loading">${message}</div>`;
     this.hideExportButton();
   }
   
@@ -1094,51 +926,29 @@ class UIManager {
     const propertyInfo = Utils.getElement("property-info");
     propertyInfo.style.display = "block";
     
-    // Debug logging
-    Utils.logCalculation('Property info display', { 
-      price: data.price, 
-      annualTax: data.annualTax, 
-      annualInsurance: data.annualInsurance,
-      monthlyRent: data.monthlyRent
-    });
+    const monthlyTax = data.annualTax ? Math.round(data.annualTax / 12) : Math.round(data.price * CONFIG.thresholds.estimatedTaxRate / 12);
+    const taxInfo = data.annualTax ? `$${monthlyTax} (extracted)` : `<span style="color: ${CONFIG.colors.warning};">~$${monthlyTax} (estimated)</span>`;
     
-    let html = `<strong>Property:</strong> $${Utils.formatCurrency(data.price)} asking price<br>`;
-    
-    // Add tax information
-    if (data.annualTax) {
-      const monthlyTax = Math.round(data.annualTax / 12);
-      html += `<strong>Monthly Property Taxes:</strong> $${monthlyTax} (extracted)<br>`;
-    } else {
-      const estimatedTax = Math.round(data.price * CONFIG.thresholds.estimatedTaxRate);
-      const monthlyEstimatedTax = Math.round(estimatedTax / 12);
-      html += `<strong>Monthly Property Taxes:</strong> <span style="color: ${CONFIG.colors.warning};">~$${monthlyEstimatedTax} (estimated)</span><br>`;
-    }
-    
-    // Add insurance information
+    let insuranceInfo;
     if (data.annualInsurance && data.annualInsurance > 0) {
       const monthlyInsurance = Math.round(data.annualInsurance / 12);
-      
-      // Check if this was extracted vs calculated
       const insuranceRate = CONFIG.defaults.insuranceRate || SettingsManager.DEFAULT_SETTINGS.insuranceRate;
       const calculatedAnnual = Math.round(data.price * insuranceRate / 100);
-      const isExtracted = Math.abs(data.annualInsurance - calculatedAnnual) > 50; // Allow some variance
-      
-      if (isExtracted) {
-        html += `<strong>Monthly Insurance:</strong> $${monthlyInsurance} (extracted)<br>`;
-      } else {
-        html += `<strong>Monthly Insurance:</strong> <span style="color: ${CONFIG.colors.warning};">~$${monthlyInsurance} (calculated from ${insuranceRate}% rate)</span><br>`;
-      }
+      const isExtracted = Math.abs(data.annualInsurance - calculatedAnnual) > 50;
+      insuranceInfo = isExtracted ? `$${monthlyInsurance} (extracted)` : 
+        `<span style="color: ${CONFIG.colors.warning};">~$${monthlyInsurance} (calculated from ${insuranceRate}% rate)</span>`;
     } else {
-      const defaultMonthly = CONFIG.defaults.conventional.insurance;
-      html += `<strong>Monthly Insurance:</strong> <span style="color: ${CONFIG.colors.warning};">~$${defaultMonthly} (fallback default)</span><br>`;
+      insuranceInfo = `<span style="color: ${CONFIG.colors.warning};">~$${CONFIG.defaults.conventional.insurance} (fallback default)</span>`;
     }
     
-    // Add rent information (Zillow only)
-    if (data.monthlyRent && data.monthlyRent > 0) {
-      html += `<strong>Rent Zestimate:</strong> $${Utils.formatCurrency(data.monthlyRent)}/month (extracted)`;
-    }
+    const rentInfo = data.monthlyRent && data.monthlyRent > 0 ? 
+      `<br><strong>Rent Zestimate:</strong> ${Utils.formatCurrency(data.monthlyRent)}/month (extracted)` : '';
     
-    propertyInfo.innerHTML = html;
+    propertyInfo.innerHTML = `
+      <strong>Property:</strong> ${Utils.formatCurrency(data.price)} asking price<br>
+      <strong>Monthly Property Taxes:</strong> ${taxInfo}<br>
+      <strong>Monthly Insurance:</strong> ${insuranceInfo}${rentInfo}
+    `;
   }
 }
 
@@ -1157,141 +967,76 @@ class EventHandlers {
   }
   
   static initializeTabSwitching() {
-    console.log('🏠 Initializing tab switching...');
-    
-    const tabs = document.querySelectorAll('.tab');
-    console.log('🏠 Found tabs:', tabs.length);
-    
-    tabs.forEach((tab, index) => {
-      console.log(`🏠 Tab ${index}:`, tab.dataset.strategy, tab.textContent);
-      
+    document.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', (e) => {
         e.preventDefault();
-        console.log('🏠 Tab clicked:', tab.dataset.strategy);
         
-        // Remove active class from all tabs
-        tabs.forEach(t => t.classList.remove('active'));
-        // Add active class to clicked tab
+        // Update active tab
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         
         const strategy = tab.dataset.strategy;
         
         if (strategy === 'settings') {
-          console.log('🏠 Showing settings tab');
-          
-          // Hide main form
-          const inputForm = document.getElementById('input-form');
-          const settingsContent = document.getElementById('settings-content');
-          const calculateBtn = document.getElementById('calculate-btn');
-          const outputDiv = document.getElementById('output');
-          
-          if (inputForm) {
-            inputForm.style.display = 'none';
-            console.log('🏠 Hidden input form');
-          }
-          
-          if (outputDiv) {
-            outputDiv.style.display = 'none';
-            console.log('🏠 Hidden output div');
-          }
-          
-          // Hide the export button in settings mode
-          UIManager.hideExportButton();
-          
-          if (settingsContent) {
-            settingsContent.style.display = 'block';
-            settingsContent.style.position = 'relative';
-            settingsContent.style.zIndex = '10';
-            console.log('🏠 Showed settings content');
-            
-            // Ensure all inputs are enabled and focusable
-            const inputs = settingsContent.querySelectorAll('input');
-            inputs.forEach((input, i) => {
-              input.disabled = false;
-              input.readOnly = false;
-              input.style.pointerEvents = 'auto';
-              input.style.userSelect = 'auto';
-              console.log(`🏠 Input ${i} enabled:`, input.id, input.value);
-              
-              // Add test event listeners to verify inputs are working
-              input.addEventListener('focus', () => {
-                console.log('🏠 Input focused:', input.id);
-              });
-              
-              input.addEventListener('input', () => {
-                console.log('🏠 Input changed:', input.id, input.value);
-              });
-              
-              input.addEventListener('blur', () => {
-                console.log('🏠 Input blurred:', input.id, input.value);
-              });
-            });
-          } else {
-            console.error('🏠 Settings content element not found!');
-          }
-          
-          if (calculateBtn) {
-            calculateBtn.style.display = 'none';
-            console.log('🏠 Hidden calculate button');
-          }
-          
-          // Load settings
-          setTimeout(() => {
-            SettingsManager.loadSettings().then(settings => {
-              console.log('🏠 Settings loaded:', settings);
-              SettingsManager.populateSettingsForm(settings);
-            }).catch(error => {
-              console.error('🏠 Error loading settings:', error);
-            });
-          }, 100);
-          
+          this.showSettingsTab();
         } else {
-          console.log('🏠 Showing strategy tab:', strategy);
-          
-          // Show main form, hide settings
-          const inputForm = document.getElementById('input-form');
-          const settingsContent = document.getElementById('settings-content');
-          const calculateBtn = document.getElementById('calculate-btn');
-          const outputDiv = document.getElementById('output');
-          
-          if (settingsContent) {
-            settingsContent.style.display = 'none';
-            console.log('🏠 Hidden settings content');
-          }
-          
-          if (inputForm) {
-            inputForm.style.display = 'block';
-            console.log('🏠 Showed input form');
-          }
-          
-          if (outputDiv) {
-            outputDiv.style.display = 'block';
-            console.log('🏠 Showed output div');
-          }
-          
-          if (calculateBtn) {
-            calculateBtn.style.display = 'block';
-            console.log('🏠 Showed calculate button');
-          }
-          
-          // Handle strategy change
-          const oldStrategy = appState.currentStrategy;
-          appState.setStrategy(strategy);
-          
-          Utils.logCalculation('Strategy changed', {
-            from: oldStrategy,
-            to: appState.currentStrategy
-          });
-          
-          this.updateStrategyUI();
-          FormDefaults.populate(appState.currentStrategy);
-          
-          if (appState.currentData) {
-            UIManager.updateResults();
-          }
+          this.showStrategyTab(strategy);
         }
       });
     });
+  }
+  
+  static showSettingsTab() {
+    const elements = this.getTabElements();
+    
+    // Hide main interface, show settings
+    elements.inputForm.style.display = 'none';
+    elements.outputDiv.style.display = 'none';
+    elements.calculateBtn.style.display = 'none';
+    elements.settingsContent.style.display = 'block';
+    UIManager.hideExportButton();
+    
+    // Enable settings inputs
+    elements.settingsContent.querySelectorAll('input').forEach(input => {
+      Object.assign(input.style, { pointerEvents: 'auto', userSelect: 'auto' });
+      input.disabled = input.readOnly = false;
+    });
+    
+    // Load settings
+    setTimeout(() => {
+      SettingsManager.loadSettings()
+        .then(settings => SettingsManager.populateSettingsForm(settings))
+        .catch(error => console.error('🏠 Error loading settings:', error));
+    }, 100);
+  }
+  
+  static showStrategyTab(strategy) {
+    const elements = this.getTabElements();
+    
+    // Show main interface, hide settings
+    elements.settingsContent.style.display = 'none';
+    elements.inputForm.style.display = 'block';
+    elements.outputDiv.style.display = 'block';
+    elements.calculateBtn.style.display = 'block';
+    
+    // Handle strategy change
+    const oldStrategy = appState.currentStrategy;
+    appState.setStrategy(strategy);
+    Utils.logCalculation('Strategy changed', { from: oldStrategy, to: appState.currentStrategy });
+    
+    this.updateStrategyUI();
+    FormDefaults.populate(appState.currentStrategy);
+    
+    if (appState.currentData) UIManager.updateResults();
+  }
+  
+  static getTabElements() {
+    return {
+      inputForm: document.getElementById('input-form'),
+      settingsContent: document.getElementById('settings-content'),
+      calculateBtn: document.getElementById('calculate-btn'),
+      outputDiv: document.getElementById('output')
+    };
   }
   
   static updateStrategyUI() {
@@ -1484,8 +1229,7 @@ class EventHandlers {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const currentTab = tabs[0];
       
-      // Check if we're on a supported site
-      if (!currentTab.url.includes('redfin.com') && !currentTab.url.includes('zillow.com')) {
+      if (!this.isSupportedSite(currentTab.url)) {
         UIManager.showError('Please navigate to a Redfin or Zillow property page.');
         return;
       }
@@ -1495,13 +1239,17 @@ class EventHandlers {
     });
   }
   
+  static isSupportedSite(url) {
+    return url.includes('redfin.com') || url.includes('zillow.com');
+  }
+  
   static tryExtractData(tabId, attempt = 1, maxAttempts = 3) {
     Utils.logCalculation(`Data extraction attempt ${attempt}`, {});
     
     chrome.tabs.sendMessage(tabId, { type: "getListingData" }, (data) => {
       if (chrome.runtime.lastError) {
         this.handleExtractionError(tabId, attempt, maxAttempts);
-      } else if (data && data.error) {
+      } else if (data?.error) {
         UIManager.showError(`Extraction error: ${data.error}<br><small>Try reloading the page and opening the extension again.</small>`);
       } else {
         Utils.logCalculation(`Data extraction successful on attempt ${attempt}`, data);
@@ -1511,82 +1259,108 @@ class EventHandlers {
   }
   
   static handleExtractionError(tabId, attempt, maxAttempts) {
-    Utils.logCalculation(`Extraction attempt ${attempt} failed`, chrome.runtime.lastError);
-    
-    if (attempt === 1) {
-      UIManager.showLoading('Loading extension script...');
-      
-      chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['content.js']
-      }, () => {
-        if (chrome.runtime.lastError) {
-          const errorMsg = chrome.runtime.lastError.message || 'Unknown error';
-          UIManager.showError(`Error: Could not inject script (${errorMsg}). <br><br><strong>Try these steps:</strong><br>1. Reload this property page<br>2. Open the extension again<br>3. Make sure you're on a Redfin or Zillow listing page`);
-          return;
+    const errorMessages = {
+      1: () => {
+        UIManager.showLoading('Loading extension script...');
+        chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['content.js']
+        }, () => {
+          if (chrome.runtime.lastError) {
+            const errorMsg = chrome.runtime.lastError.message || 'Unknown error';
+            UIManager.showError(`Error: Could not inject script (${errorMsg}). <br><br><strong>Try these steps:</strong><br>1. Reload this property page<br>2. Open the extension again<br>3. Make sure you're on a Redfin or Zillow listing page`);
+            return;
+          }
+          
+          UIManager.showLoading('Script loaded, extracting data...');
+          setTimeout(() => this.tryExtractData(tabId, 2, maxAttempts), 1500);
+        });
+      },
+      default: () => {
+        if (attempt < maxAttempts) {
+          UIManager.showLoading(`Retrying data extraction... (attempt ${attempt})`);
+          setTimeout(() => this.tryExtractData(tabId, attempt + 1, maxAttempts), 2000);
+        } else {
+          UIManager.showError(`
+            <strong>Could not extract property data</strong><br><br>
+            <strong>Troubleshooting steps:</strong><br>
+            1. Make sure you're on a property listing page (not search results)<br>
+            2. Reload the property page and try again<br>
+            3. Check if the page has fully loaded (no loading spinners)<br>
+            4. Try opening the extension on a different property<br><br>
+            <small>If the issue persists, this property page may use a different layout.</small>`);
         }
-        
-        UIManager.showLoading('Script loaded, extracting data...');
-        setTimeout(() => {
-          this.tryExtractData(tabId, 2, maxAttempts);
-        }, 1500);
-      });
-    } else if (attempt < maxAttempts) {
-      UIManager.showLoading(`Retrying data extraction... (attempt ${attempt})`);
-      setTimeout(() => {
-        this.tryExtractData(tabId, attempt + 1, maxAttempts);
-      }, 2000);
-    } else {
-      UIManager.showError(`
-        <strong>Could not extract property data</strong><br><br>
-        <strong>Troubleshooting steps:</strong><br>
-        1. Make sure you're on a property listing page (not search results)<br>
-        2. Reload the property page and try again<br>
-        3. Check if the page has fully loaded (no loading spinners)<br>
-        4. Try opening the extension on a different property<br><br>
-        <small>If the issue persists, this property page may use a different layout.</small>`);
-    }
+      }
+    };
+    
+    (errorMessages[attempt] || errorMessages.default)();
   }
   
   static handleDataReceived(data) {
     Utils.logCalculation('Property data received', data);
     
     // Validate extracted data
-    if (!data || (!data.price && !data.annualTax)) {
-      UIManager.showError(`
-        <strong>No property data found</strong><br><br>
-        This could happen if:<br>
-        - The page layout has changed<br>
-        - The page hasn't fully loaded<br>
-        - You're not on a property details page<br><br>
-        <strong>Try:</strong><br>
-        1. Reload the page and wait for it to fully load<br>
-        2. Make sure you're on a specific property page (not search results)<br>
-        3. Try a different property listing`);
+    const validationResult = this.validatePropertyData(data);
+    if (!validationResult.isValid) {
+      UIManager.showError(validationResult.errorMessage);
       return;
+    }
+    
+    // Handle missing data
+    this.normalizePropertyData(data);
+    
+    // Set up the application state
+    appState.setData(data);
+    UIManager.showPropertyInfo(data);
+    Utils.getElement("input-form").style.display = "block";
+    
+    // Set initial form defaults and calculate results
+    FormDefaults.populate(appState.currentStrategy);
+    this.populateRentFromZestimate(data);
+    UIManager.updateResults();
+  }
+  
+  static validatePropertyData(data) {
+    if (!data || (!data.price && !data.annualTax)) {
+      return {
+        isValid: false,
+        errorMessage: `
+          <strong>No property data found</strong><br><br>
+          This could happen if:<br>
+          - The page layout has changed<br>
+          - The page hasn't fully loaded<br>
+          - You're not on a property details page<br><br>
+          <strong>Try:</strong><br>
+          1. Reload the page and wait for it to fully load<br>
+          2. Make sure you're on a specific property page (not search results)<br>
+          3. Try a different property listing`
+      };
     }
     
     if (!data.price) {
-      UIManager.showError(`
-        <strong>Property price not found</strong><br><br>
-        The extension couldn't find the listing price on this page.<br>
-        This might be a sold property or the page layout is different.<br><br>
-        <small>Found tax data: ${data.annualTax ? '$' + Utils.formatCurrency(data.annualTax) : 'None'}</small>`);
-      return;
+      return {
+        isValid: false,
+        errorMessage: `
+          <strong>Property price not found</strong><br><br>
+          The extension couldn't find the listing price on this page.<br>
+          This might be a sold property or the page layout is different.<br><br>
+          <small>Found tax data: ${data.annualTax ? '$' + Utils.formatCurrency(data.annualTax) : 'None'}</small>`
+      };
     }
     
+    return { isValid: true };
+  }
+  
+  static normalizePropertyData(data) {
     // Handle missing tax data
     if (!data.annualTax) {
-      const estimatedTax = Math.round(data.price * CONFIG.thresholds.estimatedTaxRate);
-      data.annualTax = estimatedTax;
+      data.annualTax = Math.round(data.price * CONFIG.thresholds.estimatedTaxRate);
     }
 
     // Handle missing insurance data
     if (!data.annualInsurance || data.annualInsurance <= 0) {
-      // Calculate insurance based on property price and insurance rate setting
       const insuranceRate = CONFIG.defaults.insuranceRate || SettingsManager.DEFAULT_SETTINGS.insuranceRate;
-      const annualInsuranceFromRate = Math.round(data.price * insuranceRate / 100);
-      data.annualInsurance = annualInsuranceFromRate;
+      data.annualInsurance = Math.round(data.price * insuranceRate / 100);
       
       Utils.logCalculation('Using calculated insurance based on rate', { 
         propertyPrice: data.price,
@@ -1600,170 +1374,120 @@ class EventHandlers {
         monthly: Math.round(data.annualInsurance / 12)
       });
     }
+  }
+  
+  static populateRentFromZestimate(data) {
+    if (!data.monthlyRent || data.monthlyRent <= 0) return;
     
-    // Set up the application state
-    appState.setData(data);
+    const rentField = Utils.getElement(FIELD_IDS.rent);
+    const currentRent = Utils.getFloatValue(FIELD_IDS.rent);
     
-    // Show property info and form
-    UIManager.showPropertyInfo(data);
-    Utils.getElement("input-form").style.display = "block";
+    // Only populate if field is empty or contains default value
+    const shouldPopulate = !currentRent || 
+      currentRent === CONFIG.defaults.conventional.rent || 
+      currentRent === CONFIG.defaults.heloc.rent;
     
-    // Set initial form defaults and calculate results
-    FormDefaults.populate(appState.currentStrategy);
-    
-    // Auto-populate rent field with extracted rent zestimate if available and field is empty
-    if (data.monthlyRent && data.monthlyRent > 0) {
-      const rentField = Utils.getElement(FIELD_IDS.rent);
-      const currentRent = Utils.getFloatValue(FIELD_IDS.rent);
-      
-      // Only populate if field is empty or contains default value
-      if (!currentRent || 
-          currentRent === CONFIG.defaults.conventional.rent || 
-          currentRent === CONFIG.defaults.heloc.rent) {
-        Utils.setElementValue(FIELD_IDS.rent, data.monthlyRent);
-        
-        Utils.logCalculation('Auto-populated rent field with Zestimate', {
-          extractedRent: data.monthlyRent,
-          previousValue: currentRent
-        });
-      }
+    if (shouldPopulate) {
+      Utils.setElementValue(FIELD_IDS.rent, data.monthlyRent);
+      Utils.logCalculation('Auto-populated rent field with Zestimate', {
+        extractedRent: data.monthlyRent,
+        previousValue: currentRent
+      });
     }
-    
-    UIManager.updateResults();
   }
 
   static initializeSettings() {
-    console.log('🏠 Initializing settings system...');
-    
-    // Test if SettingsManager is available
-    if (typeof SettingsManager === 'undefined') {
-      console.error('🏠 SettingsManager class not found!');
-      return;
-    }
-    
     // Load and apply settings on initialization
-    SettingsManager.loadSettings().then(settings => {
-      SettingsManager.updateConfigWithSettings(settings);
-      Utils.logCalculation('Settings loaded and applied', settings);
-    }).catch(error => {
-      console.error('🏠 Error in settings initialization:', error);
-    });
+    SettingsManager.loadSettings()
+      .then(settings => {
+        SettingsManager.updateConfigWithSettings(settings);
+        Utils.logCalculation('Settings loaded and applied', settings);
+      })
+      .catch(error => console.error('🏠 Error in settings initialization:', error));
 
-    // Test settings button
-    const testBtn = document.getElementById('testSettings');
-    if (testBtn) {
-      console.log('🏠 Found test settings button');
-      testBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        console.log('🏠 Test settings clicked');
-        
-        // Test reading all input values
-        const inputs = document.querySelectorAll('#settings-content input');
-        console.log('🏠 Found inputs:', inputs.length);
-        
-        inputs.forEach((input, i) => {
-          console.log(`🏠 Input ${i}:`, {
-            id: input.id,
-            value: input.value,
-            disabled: input.disabled,
-            readOnly: input.readOnly,
-            type: input.type
-          });
-          
-          // Try to programmatically set focus
-          input.focus();
-          setTimeout(() => {
-            input.blur();
-          }, 100);
+    // Initialize all settings buttons
+    this.initializeSettingsButtons();
+  }
+  
+  static initializeSettingsButtons() {
+    const buttons = {
+      testSettings: () => this.handleTestSettings(),
+      saveSettings: () => this.handleSaveSettings(),
+      resetSettings: () => this.handleResetSettings()
+    };
+    
+    Object.entries(buttons).forEach(([id, handler]) => {
+      const btn = document.getElementById(id);
+      if (btn) {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          handler();
         });
-        
-        // Show alert with current values
-        const settings = SettingsManager.getSettingsFromForm();
-        alert('Current form values: ' + JSON.stringify(settings, null, 2));
+      }
+    });
+  }
+  
+  static handleTestSettings() {
+    const inputs = document.querySelectorAll('#settings-content input');
+    inputs.forEach((input, i) => {
+      console.log(`🏠 Input ${i}:`, {
+        id: input.id, value: input.value, disabled: input.disabled,
+        readOnly: input.readOnly, type: input.type
       });
-    }
-
-    // Save settings button
+      input.focus();
+      setTimeout(() => input.blur(), 100);
+    });
+    
+    const settings = SettingsManager.getSettingsFromForm();
+    alert('Current form values: ' + JSON.stringify(settings, null, 2));
+  }
+  
+  static async handleSaveSettings() {
     const saveBtn = document.getElementById('saveSettings');
-    if (saveBtn) {
-      console.log('🏠 Found save settings button');
-      saveBtn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        console.log('🏠 Save settings clicked');
+    try {
+      const settings = SettingsManager.getSettingsFromForm();
+      const success = await SettingsManager.saveSettings(settings);
+      
+      if (success) {
+        SettingsManager.updateConfigWithSettings(settings);
+        this.showButtonFeedback(saveBtn, 'Saved!', '#2e7d32', 'Save Settings', '#4caf50');
         
-        try {
-          const settings = SettingsManager.getSettingsFromForm();
-          const success = await SettingsManager.saveSettings(settings);
-          
-          if (success) {
-            SettingsManager.updateConfigWithSettings(settings);
-            
-            // Show feedback
-            saveBtn.textContent = 'Saved!';
-            saveBtn.style.background = '#2e7d32';
-            setTimeout(() => {
-              saveBtn.textContent = 'Save Settings';
-              saveBtn.style.background = '#4caf50';
-            }, 2000);
-            
-            // Update any visible forms with new defaults
-            if (appState.currentStrategy) {
-              FormDefaults.populate(appState.currentStrategy);
-            }
-            
-            Utils.logCalculation('Settings saved and applied', settings);
-          } else {
-            saveBtn.textContent = 'Error!';
-            saveBtn.style.background = '#d32f2f';
-            setTimeout(() => {
-              saveBtn.textContent = 'Save Settings';
-              saveBtn.style.background = '#4caf50';
-            }, 2000);
-          }
-        } catch (error) {
-          console.error('🏠 Error saving settings:', error);
-        }
-      });
-    } else {
-      console.error('🏠 Save settings button not found');
+        if (appState.currentStrategy) FormDefaults.populate(appState.currentStrategy);
+        Utils.logCalculation('Settings saved and applied', settings);
+      } else {
+        this.showButtonFeedback(saveBtn, 'Error!', '#d32f2f', 'Save Settings', '#4caf50');
+      }
+    } catch (error) {
+      console.error('🏠 Error saving settings:', error);
+      this.showButtonFeedback(saveBtn, 'Error!', '#d32f2f', 'Save Settings', '#4caf50');
     }
-
-    // Reset settings button
+  }
+  
+  static async handleResetSettings() {
+    if (!confirm('Are you sure you want to reset all settings to defaults?')) return;
+    
     const resetBtn = document.getElementById('resetSettings');
-    if (resetBtn) {
-      console.log('🏠 Found reset settings button');
-      resetBtn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        console.log('🏠 Reset settings clicked');
-        
-        if (confirm('Are you sure you want to reset all settings to defaults?')) {
-          try {
-            const settings = await SettingsManager.resetSettings();
-            SettingsManager.populateSettingsForm(settings);
-            SettingsManager.updateConfigWithSettings(settings);
-            
-            // Show feedback
-            resetBtn.textContent = 'Reset!';
-            resetBtn.style.background = '#2e7d32';
-            setTimeout(() => {
-              resetBtn.textContent = 'Reset to Defaults';
-              resetBtn.style.background = '#f44336';
-            }, 2000);
-            
-            // Update any visible forms with reset defaults
-            if (appState.currentStrategy) {
-              FormDefaults.populate(appState.currentStrategy);
-            }
-            
-            Utils.logCalculation('Settings reset to defaults', settings);
-          } catch (error) {
-            console.error('🏠 Error resetting settings:', error);
-          }
-        }
-      });
-    } else {
-      console.error('🏠 Reset settings button not found');
+    try {
+      const settings = await SettingsManager.resetSettings();
+      SettingsManager.populateSettingsForm(settings);
+      SettingsManager.updateConfigWithSettings(settings);
+      
+      this.showButtonFeedback(resetBtn, 'Reset!', '#2e7d32', 'Reset to Defaults', '#f44336');
+      
+      if (appState.currentStrategy) FormDefaults.populate(appState.currentStrategy);
+      Utils.logCalculation('Settings reset to defaults', settings);
+    } catch (error) {
+      console.error('🏠 Error resetting settings:', error);
     }
+  }
+  
+  static showButtonFeedback(button, text, color, originalText, originalColor) {
+    button.textContent = text;
+    button.style.background = color;
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.style.background = originalColor;
+    }, 2000);
   }
 }
 
@@ -1773,9 +1497,7 @@ class EventHandlers {
 
 class ExcelExporter {
   static export(calculation, propertyData, strategy) {
-    // Check if XLSX library is available
     if (typeof XLSX === 'undefined') {
-      console.error('🏠 XLSX library not loaded');
       alert('Excel export library not loaded. Please try reloading the extension.');
       return;
     }
@@ -1783,82 +1505,363 @@ class ExcelExporter {
     try {
       const isHeloc = strategy === CONFIG.strategies.heloc;
       const strategyName = isHeloc ? 'Cash + HELOC' : 'Conventional';
-      const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-      
-      // Create workbook
       const wb = XLSX.utils.book_new();
       
-      // Summary sheet
-      const summaryData = this.createSummarySheet(calculation, propertyData, strategyName);
-      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+      // Create all worksheets with formulas
+      const sheets = [
+        ['Inputs & Parameters', this.createInputsSheet(appState.formParameters, propertyData, calculation, strategyName, isHeloc)],
+        ['Calculations', this.createCalculationsSheet(calculation, isHeloc)],
+        ['Cash Flow Analysis', this.createCashFlowSheetWithFormulas(isHeloc)],
+        ['Summary', this.createSummarySheetWithFormulas(propertyData, strategyName, isHeloc)]
+      ];
       
-      // Assumptions & Parameters sheet
-      const assumptionsData = this.createAssumptionsSheet(appState.formParameters, strategyName, isHeloc);
-      const assumptionsWs = XLSX.utils.aoa_to_sheet(assumptionsData);
-      XLSX.utils.book_append_sheet(wb, assumptionsWs, 'Assumptions & Parameters');
-      
-      // Detailed calculations sheet
-      const detailsData = isHeloc 
-        ? this.createHelocDetailsSheet(calculation)
-        : this.createConventionalDetailsSheet(calculation);
-      const detailsWs = XLSX.utils.aoa_to_sheet(detailsData);
-      XLSX.utils.book_append_sheet(wb, detailsWs, 'Detailed Calculations');
-      
-      // Cash flow analysis sheet
-      const cashFlowData = this.createCashFlowSheet(calculation, isHeloc);
-      const cashFlowWs = XLSX.utils.aoa_to_sheet(cashFlowData);
-      XLSX.utils.book_append_sheet(wb, cashFlowWs, 'Cash Flow Analysis');
-      
-      // Generate filename
-      const purchasePrice = Math.round(calculation.purchasePrice / 1000);
-      const roi = calculation.roi.toFixed(1);
-      const filename = `ROI_Analysis_${strategyName.replace(/\s+/g, '_')}_${purchasePrice}k_${roi}pct_${timestamp}.xlsx`;
-      
-      // Download file
-      XLSX.writeFile(wb, filename);
-      
-      Utils.logCalculation('Excel export completed', {
-        strategy: strategyName,
-        filename: filename,
-        roi: roi
+      sheets.forEach(([name, data]) => {
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        
+        // Apply number formatting to currency cells
+        this.applyCellFormatting(ws, data);
+        
+        XLSX.utils.book_append_sheet(wb, ws, name);
       });
       
+      // Generate filename and download
+      const price = Math.round(calculation.purchasePrice / 1000);
+      const roi = calculation.roi.toFixed(1);
+      const date = new Date().toISOString().split('T')[0];
+      const filename = `ROI_Analysis_${strategyName.replace(/\s+/g, '_')}_${price}k_${roi}pct_${date}.xlsx`;
+      
+      XLSX.writeFile(wb, filename);
     } catch (error) {
       console.error('🏠 Excel export error:', error);
       alert('Error exporting to Excel. Please try again.');
     }
   }
   
-  static createSummarySheet(calculation, propertyData, strategyName) {
+  static createInputsSheet(formParameters, propertyData, calculation, strategyName, isHeloc) {
+    const params = formParameters.getAll();
     const data = [
-      ['Real Estate ROI Analysis - Summary'],
+      ['Real Estate ROI Analysis - Input Parameters', ''],
+      ['Strategy:', strategyName],
+      ['Generated on:', new Date().toLocaleString()],
+      ['', ''],
+      ['PROPERTY INFORMATION', ''],
+      ['Asking Price:', propertyData?.price || calculation?.askingPrice || 0],
+      ['Target Purchase Price:', isHeloc ? (params.targetPurchasePriceHeloc || 0) : (params.targetPurchasePriceConventional || 0)],
+      ['Annual Property Taxes:', calculation?.annualTax || (params.propertyTaxes * 12) || 0],
+      ['', ''],
+      ['LOAN PARAMETERS', ''],
+      ['Down Payment %:', (params.percentDown || 0) / 100],
+      ['Interest Rate %:', (params.interestRate || 0) / 100],
+      ['Loan Term (Years):', params.loanTerm || 30],
+      ['', ''],
+      ['INVESTMENT COSTS', ''],
+      ['Closing Costs:', params.closingCosts || 0],
+      ['Improvements/Renovation:', params.improvements || 0],
+      ['Renovation Period (Months):', params.renovationPeriod || 0],
+      ['', ''],
+      ['MONTHLY INCOME & EXPENSES', ''],
+      ['Monthly Rent:', params.rent || 0],
+      ['Monthly Property Taxes:', params.propertyTaxes || 0],
+      ['Monthly Insurance:', params.insurance || 0],
+      ['Other Monthly Expenses:', params.otherMisc || 0]
+    ];
+    
+    if (isHeloc) {
+      data.push(
+        ['', ''],
+        ['HELOC PARAMETERS', ''],
+        ['HELOC Amount:', params.helocAmount || 0],
+        ['HELOC Interest Rate %:', (params.helocRate || 0) / 100],
+        ['HELOC Term (Years):', params.helocTerm || 10],
+        ['ARV (After Repair Value):', params.arv || 0],
+        ['Refinance Rate %:', (params.refinanceRate || 0) / 100],
+        ['Seasoning Period (Months):', params.seasoningPeriod || 6]
+      );
+    }
+    
+    return data;
+  }
+  
+  static createCalculationsSheet(calculation, isHeloc) {
+    if (isHeloc) {
+      return this.createHelocCalculationsWithFormulas();
+    } else {
+      return this.createConventionalCalculationsWithFormulas();
+    }
+  }
+  
+  static createConventionalCalculationsWithFormulas() {
+    return [
+      ['Conventional Financing - Calculations', ''],
+      ['', ''],
+      ['DERIVED VALUES', ''],
+      ['Purchase Price:', '=IF(\'Inputs & Parameters\'.B7>0,\'Inputs & Parameters\'.B7,\'Inputs & Parameters\'.B6)'],
+      ['Down Payment:', '=B4*\'Inputs & Parameters\'.B11'],
+      ['Loan Amount:', '=B4-B5'],
+      ['', ''],
+      ['MORTGAGE CALCULATION', ''],
+      ['Monthly Interest Rate:', '=\'Inputs & Parameters\'.B12/12'],
+      ['Number of Payments:', '=\'Inputs & Parameters\'.B13*12'],
+      ['Monthly Payment (P&I):', '=PMT(B9,B10,-B6)'],
+      ['', ''],
+      ['HOLDING COSTS', ''],
+      ['Holding Period (Months):', '=\'Inputs & Parameters\'.B18'],
+      ['Total Holding Costs:', '=B11*B14'],
+      ['', ''],
+      ['TOTAL INVESTMENT', ''],
+      ['Down Payment:', '=B5'],
+      ['Closing Costs:', '=\'Inputs & Parameters\'.B16'],
+      ['Improvements:', '=\'Inputs & Parameters\'.B17'],
+      ['Holding Costs:', '=B15'],
+      ['Total Cash Investment:', '=B18+B19+B20+B21'],
+      ['', ''],
+      ['MONTHLY CASH FLOW', ''],
+      ['Monthly Rent:', '=\'Inputs & Parameters\'.B21'],
+      ['Monthly Mortgage (P&I):', '=B11'],
+      ['Monthly Property Taxes:', '=\'Inputs & Parameters\'.B22'],
+      ['Monthly Insurance:', '=\'Inputs & Parameters\'.B23'],
+      ['Other Monthly Expenses:', '=\'Inputs & Parameters\'.B24'],
+      ['Net Monthly Cash Flow:', '=B25-B26-B27-B28-B29'],
+      ['', ''],
+      ['ROI ANALYSIS', ''],
+      ['Annual Cash Flow:', '=B30*12'],
+      ['Total Investment:', '=B22'],
+      ['ROI Percentage:', '=B33/B34'],
+      ['Payback Period (Years):', '=B34/B33']
+    ];
+  }
+  
+  static createHelocCalculationsWithFormulas() {
+    return [
+      ['Cash + HELOC Strategy - Calculations', ''],
+      ['', ''],
+      ['DERIVED VALUES', ''],
+      ['Purchase Price:', '=IF(\'Inputs & Parameters\'.B7>0,\'Inputs & Parameters\'.B7,\'Inputs & Parameters\'.B6)'],
+      ['Initial Cash Required:', '=B4+\'Inputs & Parameters\'.B16+\'Inputs & Parameters\'.B17'],
+      ['', ''],
+      ['HELOC PAYMENTS', ''],
+      ['HELOC Monthly Rate:', '=\'Inputs & Parameters\'.B27/12'],
+      ['HELOC Payments:', '=\'Inputs & Parameters\'.B28*12'],
+      ['HELOC Monthly Payment:', '=PMT(B8,B9,-\'Inputs & Parameters\'.B26)'],
+      ['Total Holding Period:', '=\'Inputs & Parameters\'.B18+1'],
+      ['HELOC Holding Costs:', '=B10*B11'],
+      ['', ''],
+      ['TOTAL INITIAL INVESTMENT', ''],
+      ['Initial Cash + Improvements:', '=B5'],
+      ['HELOC Holding Costs:', '=B12'],
+      ['Total Cash Investment:', '=B15+B16'],
+      ['', ''],
+      ['REFINANCE ANALYSIS', ''],
+      ['ARV:', '=\'Inputs & Parameters\'.B29'],
+      ['70% LTV Limit:', '=B19*0.7'],
+      ['Time Constraint Active:', '=IF(\'Inputs & Parameters\'.B18<6,"YES","NO")'],
+      ['Time Constraint Limit:', '=IF(B21="YES",B4,B20)'],
+      ['Refinance Amount:', '=MIN(B20,B22)'],
+      ['Refinance Closing Costs:', 3000],
+      ['Net Cash Out:', '=B23-B24'],
+      ['', ''],
+      ['FINAL INVESTMENT', ''],
+      ['Total Cash In:', '=B17'],
+      ['Less: Cash Out:', '=B25'],
+      ['Final Cash Investment:', '=B28-B29'],
+      ['', ''],
+      ['NEW MORTGAGE CALCULATION', ''],
+      ['Refinance Monthly Rate:', '=\'Inputs & Parameters\'.B30/12'],
+      ['Refinance Payments:', '=30*12'],
+      ['New Monthly Payment:', '=PMT(B33,B34,-B23)'],
+      ['', ''],
+      ['MONTHLY CASH FLOW', ''],
+      ['Monthly Rent:', '=\'Inputs & Parameters\'.B21'],
+      ['New Mortgage Payment:', '=B35'],
+      ['Monthly Property Taxes:', '=\'Inputs & Parameters\'.B22'],
+      ['Monthly Insurance:', '=\'Inputs & Parameters\'.B23'],
+      ['Other Monthly Expenses:', '=\'Inputs & Parameters\'.B24'],
+      ['Net Monthly Cash Flow:', '=B37-B38-B39-B40-B41'],
+      ['', ''],
+      ['ROI ANALYSIS', ''],
+      ['Annual Cash Flow:', '=B42*12'],
+      ['Final Investment:', '=B30'],
+      ['ROI Percentage:', '=B44/B45'],
+      ['Payback Period (Years):', '=B45/B44']
+    ];
+  }
+  
+  static createCashFlowSheetWithFormulas(isHeloc) {
+    const data = [
+      ['Cash Flow Analysis - 12 Month Projection', '', '', '', '', '', ''],
+      ['', '', '', '', '', '', ''],
+      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow'],
+      ['', '', '', '', '', '', '']
+    ];
+    
+    const rentRef = 'Calculations.B' + (isHeloc ? '37' : '25');
+    const mortgageRef = 'Calculations.B' + (isHeloc ? '38' : '26');
+    const taxesRef = 'Calculations.B' + (isHeloc ? '39' : '27');
+    const insuranceRef = 'Calculations.B' + (isHeloc ? '40' : '28');
+    const otherRef = 'Calculations.B' + (isHeloc ? '41' : '29');
+    const cashFlowRef = 'Calculations.B' + (isHeloc ? '42' : '30');
+    
+    // Add 12 months of data with formulas
+    for (let month = 1; month <= 12; month++) {
+      data.push([
+        month,
+        '=' + rentRef,
+        '=' + mortgageRef,
+        '=' + taxesRef,
+        '=' + insuranceRef,
+        '=' + otherRef,
+        '=' + cashFlowRef
+      ]);
+    }
+    
+    // Add totals row with SUM formulas
+    data.push([
+      'TOTAL',
+      '=SUM(B5:B16)',
+      '=SUM(C5:C16)',
+      '=SUM(D5:D16)',
+      '=SUM(E5:E16)',
+      '=SUM(F5:F16)',
+      '=SUM(G5:G16)'
+    ]);
+    
+    return data;
+  }
+  
+  static createSummarySheetWithFormulas(propertyData, strategyName, isHeloc) {
+    const baseData = [
+      ['Real Estate ROI Analysis - Executive Summary', ''],
       ['Generated on:', new Date().toLocaleString()],
       ['Strategy:', strategyName],
-      [],
-      ['PROPERTY INFORMATION'],
+      ['', ''],
+      ['PROPERTY INFORMATION', ''],
+      ['Asking Price:', '=\'Inputs & Parameters\'.B6'],
+      ['Purchase Price:', '=Calculations.B4'],
+      ['Discount Amount:', '=B6-B7'],
+      ['Discount Percentage:', '=B8/B6'],
+      ['', ''],
+      ['KEY PERFORMANCE METRICS', ''],
+      ['Annual ROI:', '=Calculations.B' + (isHeloc ? '46' : '35')],
+      ['Monthly Cash Flow:', '=Calculations.B' + (isHeloc ? '42' : '30')],
+      ['Annual Cash Flow:', '=Calculations.B' + (isHeloc ? '44' : '33')],
+      ['Payback Period (Years):', '=Calculations.B' + (isHeloc ? '47' : '36')],
+      ['', ''],
+      ['INVESTMENT SUMMARY', ''],
+      ['Total Cash Investment:', '=Calculations.B' + (isHeloc ? '30' : '22')]
+    ];
+    
+    if (isHeloc) {
+      baseData.push(
+        ['Cash Out (Refinance):', '=Calculations.B25'],
+        ['Final Cash Investment:', '=Calculations.B30']
+      );
+    }
+    
+    baseData.push(
+      ['', ''],
+      ['MONTHLY BREAKDOWN', ''],
+      ['Rental Income:', '=Calculations.B' + (isHeloc ? '37' : '25')],
+      ['Mortgage Payment:', '=Calculations.B' + (isHeloc ? '38' : '26')],
+      ['Property Taxes:', '=Calculations.B' + (isHeloc ? '39' : '27')],
+      ['Insurance:', '=Calculations.B' + (isHeloc ? '40' : '28')],
+      ['Other Expenses:', '=Calculations.B' + (isHeloc ? '41' : '29')],
+      ['Net Cash Flow:', '=Calculations.B' + (isHeloc ? '42' : '30')],
+      ['', ''],
+      ['PERFORMANCE INDICATORS', ''],
+      ['Cash-on-Cash Return:', '=Calculations.B' + (isHeloc ? '46' : '35')],
+      ['Break-even Point:', '=Calculations.B' + (isHeloc ? '47' : '36')],
+      ['Monthly ROI:', '=Calculations.B' + (isHeloc ? '46' : '35') + '/12']
+    );
+    
+    return baseData;
+  }
+  
+  static applyCellFormatting(ws, data) {
+    if (!ws['!ref']) return;
+    
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    
+    for (let row = range.s.r; row <= range.e.r; row++) {
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+        const cell = ws[cellAddress];
+        
+        if (cell && data[row] && data[row][col]) {
+          const cellLabel = typeof data[row][col-1] === 'string' ? data[row][col-1] : '';
+          const cellValue = data[row][col];
+          
+          // Check if it's a percentage cell (rate fields or percentage labels)
+          if ((typeof cellValue === 'string' && cellValue.includes('%')) ||
+              cellLabel.includes('Rate %') || 
+              cellLabel.includes('Down Payment %') ||
+              cellLabel.includes('ROI') ||
+              (cell.f && (cell.f.includes('/B6') || cell.f.includes('/B34') || 
+                         cell.f.includes('/B45') || cell.f.includes('/12')))) {
+            cell.z = '0.00%';
+          }
+          // Check if it's a currency cell (price, cost, payment, cash flow fields)
+          else if (cellLabel.includes('Price') || 
+                   cellLabel.includes('Cost') || 
+                   cellLabel.includes('Payment') ||
+                   cellLabel.includes('Cash') ||
+                   cellLabel.includes('Rent') ||
+                   cellLabel.includes('Amount') ||
+                   cellLabel.includes('Investment') ||
+                   cellLabel.includes('Income') ||
+                   cellLabel.includes('Expense') ||
+                   cellLabel.includes('Insurance') ||
+                   cellLabel.includes('Taxes') ||
+                   cellLabel.includes('Improvement') ||
+                   (cell.f && (cell.f.includes('PMT') || cell.f.includes('SUM') || 
+                              cell.f.includes('Cash') || cell.f.includes('Payment') ||
+                              cell.f.includes('Price') || cell.f.includes('Amount')))) {
+            cell.z = '"$"#,##0.00';
+          }
+          // Number formatting for years, months, periods (no currency or percentage)
+          else if (cellLabel.includes('Years') || 
+                   cellLabel.includes('Months') ||
+                   cellLabel.includes('Period') ||
+                   cellLabel.includes('Term')) {
+            cell.z = '0.00';
+          }
+        }
+      }
+    }
+  }
+  
+  static createSummarySheet(calculation, propertyData, strategyName) {
+    const cashOut = calculation.cashOut !== undefined ? [
+      ['Cash Out (Refinance):', this.formatCurrency(calculation.cashOut)],
+      ['Final Cash In:', this.formatCurrency(calculation.finalCashIn)]
+    ] : [];
+    
+    const baseData = [
+      ['Real Estate ROI Analysis - Summary', ''], 
+      ['Generated on:', new Date().toLocaleString()], 
+      ['Strategy:', strategyName], 
+      ['', ''],
+      ['PROPERTY INFORMATION', ''],
       ['Asking Price:', this.formatCurrency(calculation.askingPrice || propertyData?.price || 'N/A')],
       ['Purchase Price:', this.formatCurrency(calculation.purchasePrice)],
-      ['Discount:', calculation.discountPercent ? `${calculation.discountPercent.toFixed(1)}%` : 'N/A'],
-      [],
-      ['KEY RESULTS'],
+      ['Discount:', calculation.discountPercent ? `${calculation.discountPercent.toFixed(1)}%` : 'N/A'], 
+      ['', ''],
+      ['KEY RESULTS', ''],
       ['Annual ROI:', `${calculation.roi.toFixed(2)}%`],
       ['Monthly Cash Flow:', this.formatCurrency(calculation.monthlyCashFlowWithHeloc || calculation.monthlyCashFlow)],
       ['Annual Cash Flow:', this.formatCurrency(calculation.annualCashFlow)],
-      ['Payback Period:', `${calculation.paybackPeriod.toFixed(1)} years`],
-      [],
-      ['INVESTMENT SUMMARY'],
+      ['Payback Period:', `${calculation.paybackPeriod.toFixed(1)} years`], 
+      ['', ''],
+      ['INVESTMENT SUMMARY', ''], 
       ['Total Cash In:', this.formatCurrency(calculation.totalCashIn)]
     ];
     
-    if (calculation.cashOut !== undefined) {
-      data.push(['Cash Out (Refinance):', this.formatCurrency(calculation.cashOut)]);
-      data.push(['Final Cash In:', this.formatCurrency(calculation.finalCashIn)]);
+    if (cashOut.length > 0) {
+      baseData.push(...cashOut);
     }
     
-    data.push(
-      [],
-      ['MONTHLY BREAKDOWN'],
+    baseData.push(
+      ['', ''],
+      ['MONTHLY BREAKDOWN', ''],
       ['Rental Income:', this.formatCurrency(calculation.details.rent)],
       ['Mortgage Payment:', this.formatCurrency(Math.round(calculation.mortgagePayment))],
       ['Property Taxes:', this.formatCurrency(calculation.details.taxes)],
@@ -1867,210 +1870,7 @@ class ExcelExporter {
       ['Net Cash Flow:', this.formatCurrency(calculation.monthlyCashFlowWithHeloc || calculation.monthlyCashFlow)]
     );
     
-    return data;
-  }
-  
-  static createAssumptionsSheet(formParameters, strategyName, isHeloc) {
-    const params = formParameters.getAll();
-    
-    const data = [
-      ['Assumptions & Parameters'],
-      ['Strategy:', strategyName],
-      ['Generated on:', new Date().toLocaleString()],
-      [],
-      ['PROPERTY PARAMETERS'],
-      ['Expected Monthly Rent:', this.formatCurrency(params.rent)],
-      ['Remodel Budget:', this.formatCurrency(params.improvements)],
-      ['Remodel Time:', `${params.renovationPeriod} months`],
-      [],
-      ['FINANCING PARAMETERS']
-    ];
-    
-    if (isHeloc) {
-      // HELOC-specific parameters
-      data.push(
-        ['Strategy Type:', 'Cash Purchase + HELOC + Refinance'],
-        ['HELOC Interest Rate:', `${params.helocRate}%`],
-        ['HELOC Amount:', this.formatCurrency(params.helocAmount)],
-        ['HELOC Term:', `${params.helocTerm} years`],
-        ['Seasoning Period:', `${params.seasoningPeriod} months`],
-        ['Refinance Interest Rate:', `${params.refinanceRate}%`],
-        ['ARV (After Repair Value):', this.formatCurrency(params.arv)],
-        [],
-        ['COST ASSUMPTIONS'],
-        ['Initial Closing Costs:', this.formatCurrency(params.closingCosts)],
-        ['Refinance Closing Costs:', this.formatCurrency(CONFIG.thresholds.refinanceClosingCosts)],
-        ['Refinance LTV Limit:', `${(CONFIG.thresholds.refinanceLTV * 100).toFixed(0)}%`]
-      );
-    } else {
-      // Conventional financing parameters
-      data.push(
-        ['Strategy Type:', 'Conventional Financing'],
-        ['Interest Rate:', `${params.interestRate}%`],
-        ['Down Payment:', `${params.percentDown}%`],
-        ['Loan Term:', `${params.loanTerm} years`],
-        [],
-        ['COST ASSUMPTIONS'],
-        ['Closing Costs:', this.formatCurrency(params.closingCosts)]
-      );
-    }
-    
-    // Common monthly expenses for both strategies
-    data.push(
-      [],
-      ['MONTHLY EXPENSES'],
-      ['Property Taxes:', this.formatCurrency(params.propertyTaxes)],
-      ['Insurance:', this.formatCurrency(params.insurance)],
-      ['Other/Miscellaneous:', this.formatCurrency(params.otherMisc)],
-      [],
-      ['CALCULATION ASSUMPTIONS'],
-      ['Target ROI Threshold:', `${CONFIG.thresholds.targetROI}%`],
-      ['Good ROI Threshold:', `${CONFIG.thresholds.goodROI}%`],
-      ['OK ROI Threshold:', `${CONFIG.thresholds.okROI}%`]
-    );
-    
-    // Add target purchase price information
-    const targetPriceField = isHeloc ? 'targetPurchasePriceHeloc' : 'targetPurchasePriceConventional';
-    const targetPrice = params[targetPriceField];
-    
-    if (targetPrice && targetPrice > 0) {
-      data.push(['Target Purchase Price:', this.formatCurrency(targetPrice) + ' (User Specified)']);
-    } else {
-      data.push(['Target Purchase Price:', 'Auto-calculated for ' + CONFIG.thresholds.targetROI + '% ROI']);
-    }
-    
-    // Add current date and time for reference
-    data.push(
-      [],
-      ['EXPORT INFORMATION'],
-      ['Extension Version:', '1.3.0'],
-      ['Export Date:', new Date().toLocaleDateString()],
-      ['Export Time:', new Date().toLocaleTimeString()]
-    );
-    
-    return data;
-  }
-  
-  static createConventionalDetailsSheet(calculation) {
-    return [
-      ['Conventional Financing - Detailed Calculations'],
-      [],
-      ['PURCHASE & FINANCING'],
-      ['Purchase Price:', this.formatCurrency(calculation.purchasePrice)],
-      ['Down Payment:', this.formatCurrency(calculation.downPayment)],
-      ['Loan Amount:', this.formatCurrency(calculation.loanAmount)],
-      ['Monthly Mortgage (P&I):', this.formatCurrency(Math.round(calculation.mortgagePayment))],
-      [],
-      ['TOTAL INVESTMENT BREAKDOWN'],
-      ['Down Payment:', this.formatCurrency(calculation.downPayment)],
-      ['Closing Costs:', this.formatCurrency(5000)], // From the details format
-      ['Improvements:', this.formatCurrency(calculation.totalCashIn - calculation.downPayment - 5000 - calculation.holdingCosts)],
-      ['Holding Costs:', this.formatCurrency(calculation.holdingCosts)],
-      ['Total Cash In:', this.formatCurrency(calculation.totalCashIn)],
-      [],
-      ['MONTHLY INCOME & EXPENSES'],
-      ['Rental Income:', this.formatCurrency(calculation.details.rent)],
-      ['Mortgage Payment:', this.formatCurrency(Math.round(calculation.mortgagePayment))],
-      ['Property Taxes:', this.formatCurrency(calculation.details.taxes)],
-      ['Insurance:', this.formatCurrency(calculation.details.insurance)],
-      ['Other/Misc:', this.formatCurrency(calculation.details.other)],
-      ['Net Monthly Cash Flow:', this.formatCurrency(calculation.monthlyCashFlow)],
-      [],
-      ['ROI CALCULATION'],
-      ['Annual Cash Flow:', this.formatCurrency(calculation.annualCashFlow)],
-      ['Total Investment:', this.formatCurrency(calculation.totalCashIn)],
-      ['ROI Percentage:', `${calculation.roi.toFixed(2)}%`]
-    ];
-  }
-  
-  static createHelocDetailsSheet(calculation) {
-    const totalHoldingPeriod = Math.round(calculation.holdingCosts / calculation.helocPayment);
-    const renovationPeriod = calculation.renovationPeriod;
-    const hasTimeConstraint = renovationPeriod < CONFIG.thresholds.seasoningMonths;
-    
-    return [
-      ['Cash + HELOC Strategy - Detailed Calculations'],
-      [],
-      ['INITIAL INVESTMENT'],
-      ['Purchase Price (Cash):', this.formatCurrency(calculation.purchasePrice)],
-      ['Closing Costs:', this.formatCurrency(1000)],
-      ['Improvements:', this.formatCurrency(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts)],
-      ['HELOC Payments (Holding Period):', this.formatCurrency(calculation.holdingCosts)],
-      ['Total Cash In:', this.formatCurrency(calculation.totalCashIn)],
-      [],
-      ['HELOC DETAILS'],
-      ['Monthly HELOC Payment:', this.formatCurrency(Math.round(calculation.helocPayment))],
-      ['Holding Period:', `${totalHoldingPeriod} months`],
-      ['Renovation Period:', `${renovationPeriod} months`],
-      [],
-      ['REFINANCE ANALYSIS'],
-      ['ARV (After Repair Value):', this.formatCurrency(calculation.arv)],
-      ['Standard 70% LTV Limit:', this.formatCurrency(Math.round(calculation.arv * CONFIG.thresholds.refinanceLTV))],
-      hasTimeConstraint ? ['Time Constraint Limit:', this.formatCurrency(calculation.purchasePrice)] : [],
-      ['Actual Refinance Amount:', this.formatCurrency(Math.round(calculation.refinanceLoanAmount))],
-      ['Refinance Closing Costs:', this.formatCurrency(CONFIG.thresholds.refinanceClosingCosts)],
-      ['Net Cash Out:', this.formatCurrency(calculation.cashOut)],
-      [],
-      ['FINAL INVESTMENT'],
-      ['Total Cash In:', this.formatCurrency(calculation.totalCashIn)],
-      ['Less: Cash Out:', this.formatCurrency(calculation.cashOut)],
-      ['Final Cash In:', this.formatCurrency(calculation.finalCashIn)],
-      [],
-      ['POST-REFINANCE MONTHLY CASH FLOW'],
-      ['Rental Income:', this.formatCurrency(calculation.details.rent)],
-      ['New Mortgage Payment:', this.formatCurrency(Math.round(calculation.mortgagePayment))],
-      ['Property Taxes:', this.formatCurrency(calculation.details.taxes)],
-      ['Insurance:', this.formatCurrency(calculation.details.insurance)],
-      ['Other/Misc:', this.formatCurrency(calculation.details.other)],
-      ['Net Monthly Cash Flow:', this.formatCurrency(calculation.monthlyCashFlowWithHeloc)],
-      [],
-      ['ROI CALCULATION'],
-      ['Annual Cash Flow:', this.formatCurrency(calculation.annualCashFlow)],
-      ['Final Investment:', this.formatCurrency(calculation.finalCashIn)],
-      ['ROI Percentage:', `${calculation.roi.toFixed(2)}%`]
-    ].filter(row => row.length > 0); // Remove empty arrays from time constraint check
-  }
-  
-  static createCashFlowSheet(calculation, isHeloc) {
-    const data = [
-      ['Cash Flow Analysis'],
-      [],
-      ['ANNUAL PROJECTION (12 MONTHS)'],
-      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow']
-    ];
-    
-    const monthlyRent = calculation.details.rent;
-    const monthlyMortgage = Math.round(calculation.mortgagePayment);
-    const monthlyTaxes = calculation.details.taxes;
-    const monthlyInsurance = calculation.details.insurance;
-    const monthlyOther = calculation.details.other;
-    const monthlyCashFlow = Math.round(isHeloc ? calculation.monthlyCashFlowWithHeloc : calculation.monthlyCashFlow);
-    
-    // Add 12 months of data
-    for (let month = 1; month <= 12; month++) {
-      data.push([
-        month,
-        this.formatCurrency(monthlyRent),
-        this.formatCurrency(monthlyMortgage),
-        this.formatCurrency(monthlyTaxes),
-        this.formatCurrency(monthlyInsurance),
-        this.formatCurrency(monthlyOther),
-        this.formatCurrency(monthlyCashFlow)
-      ]);
-    }
-    
-    // Add totals row
-    data.push([
-      'TOTAL',
-      this.formatCurrency(monthlyRent * 12),
-      this.formatCurrency(monthlyMortgage * 12),
-      this.formatCurrency(monthlyTaxes * 12),
-      this.formatCurrency(monthlyInsurance * 12),
-      this.formatCurrency(monthlyOther * 12),
-      this.formatCurrency(monthlyCashFlow * 12)
-    ]);
-    
-    return data;
+    return baseData;
   }
   
   static formatCurrency(amount) {
