@@ -1595,39 +1595,39 @@ class ExcelExporter {
       ['Conventional Financing - Calculations', ''],
       ['', ''],
       ['DERIVED VALUES', ''],
-      ['Purchase Price:', '=IF(\'Inputs & Parameters\'.B7>0,\'Inputs & Parameters\'.B7,\'Inputs & Parameters\'.B6)'],
-      ['Down Payment:', '=B4*\'Inputs & Parameters\'.B11'],
-      ['Loan Amount:', '=B4-B5'],
+      ['Purchase Price:', { f: 'IF(\'Inputs & Parameters\'!B7>0,\'Inputs & Parameters\'!B7,\'Inputs & Parameters\'!B6)' }],
+      ['Down Payment:', { f: 'B4*\'Inputs & Parameters\'!B11' }],
+      ['Loan Amount:', { f: 'B4-B5' }],
       ['', ''],
       ['MORTGAGE CALCULATION', ''],
-      ['Monthly Interest Rate:', '=\'Inputs & Parameters\'.B12/12'],
-      ['Number of Payments:', '=\'Inputs & Parameters\'.B13*12'],
-      ['Monthly Payment (P&I):', '=PMT(B9,B10,-B6)'],
+      ['Monthly Interest Rate:', { f: '\'Inputs & Parameters\'!B12/12' }],
+      ['Number of Payments:', { f: '\'Inputs & Parameters\'!B13*12' }],
+      ['Monthly Payment (P&I):', { f: 'PMT(B9,B10,-B6)' }],
       ['', ''],
       ['HOLDING COSTS', ''],
-      ['Holding Period (Months):', '=\'Inputs & Parameters\'.B18'],
-      ['Total Holding Costs:', '=B11*B14'],
+      ['Holding Period (Months):', { f: '\'Inputs & Parameters\'!B18' }],
+      ['Total Holding Costs:', { f: 'B11*B14' }],
       ['', ''],
       ['TOTAL INVESTMENT', ''],
-      ['Down Payment:', '=B5'],
-      ['Closing Costs:', '=\'Inputs & Parameters\'.B16'],
-      ['Improvements:', '=\'Inputs & Parameters\'.B17'],
-      ['Holding Costs:', '=B15'],
-      ['Total Cash Investment:', '=B18+B19+B20+B21'],
+      ['Down Payment:', { f: 'B5' }],
+      ['Closing Costs:', { f: '\'Inputs & Parameters\'!B16' }],
+      ['Improvements:', { f: '\'Inputs & Parameters\'!B17' }],
+      ['Holding Costs:', { f: 'B15' }],
+      ['Total Cash Investment:', { f: 'B18+B19+B20+B21' }],
       ['', ''],
       ['MONTHLY CASH FLOW', ''],
-      ['Monthly Rent:', '=\'Inputs & Parameters\'.B21'],
-      ['Monthly Mortgage (P&I):', '=B11'],
-      ['Monthly Property Taxes:', '=\'Inputs & Parameters\'.B22'],
-      ['Monthly Insurance:', '=\'Inputs & Parameters\'.B23'],
-      ['Other Monthly Expenses:', '=\'Inputs & Parameters\'.B24'],
-      ['Net Monthly Cash Flow:', '=B25-B26-B27-B28-B29'],
+      ['Monthly Rent:', { f: '\'Inputs & Parameters\'!B21' }],
+      ['Monthly Mortgage (P&I):', { f: 'B11' }],
+      ['Monthly Property Taxes:', { f: '\'Inputs & Parameters\'!B22' }],
+      ['Monthly Insurance:', { f: '\'Inputs & Parameters\'!B23' }],
+      ['Other Monthly Expenses:', { f: '\'Inputs & Parameters\'!B24' }],
+      ['Net Monthly Cash Flow:', { f: 'B25-B26-B27-B28-B29' }],
       ['', ''],
       ['ROI ANALYSIS', ''],
-      ['Annual Cash Flow:', '=B30*12'],
-      ['Total Investment:', '=B22'],
-      ['ROI Percentage:', '=B33/B34'],
-      ['Payback Period (Years):', '=B34/B33']
+      ['Annual Cash Flow:', { f: 'B30*12' }],
+      ['Total Investment:', { f: 'B22' }],
+      ['ROI Percentage:', { f: 'B33/B34' }],
+      ['Payback Period (Years):', { f: 'B34/B33' }]
     ];
   }
   
@@ -1636,53 +1636,53 @@ class ExcelExporter {
       ['Cash + HELOC Strategy - Calculations', ''],
       ['', ''],
       ['DERIVED VALUES', ''],
-      ['Purchase Price:', '=IF(\'Inputs & Parameters\'.B7>0,\'Inputs & Parameters\'.B7,\'Inputs & Parameters\'.B6)'],
-      ['Initial Cash Required:', '=B4+\'Inputs & Parameters\'.B16+\'Inputs & Parameters\'.B17'],
+      ['Purchase Price:', { f: 'IF(\'Inputs & Parameters\'!B7>0,\'Inputs & Parameters\'!B7,\'Inputs & Parameters\'!B6)' }],
+      ['Initial Cash Required:', { f: 'B4+\'Inputs & Parameters\'!B16+\'Inputs & Parameters\'!B17' }],
       ['', ''],
       ['HELOC PAYMENTS', ''],
-      ['HELOC Monthly Rate:', '=\'Inputs & Parameters\'.B27/12'],
-      ['HELOC Payments:', '=\'Inputs & Parameters\'.B28*12'],
-      ['HELOC Monthly Payment:', '=PMT(B8,B9,-\'Inputs & Parameters\'.B26)'],
-      ['Total Holding Period:', '=\'Inputs & Parameters\'.B18+1'],
-      ['HELOC Holding Costs:', '=B10*B11'],
+      ['HELOC Monthly Rate:', { f: '\'Inputs & Parameters\'!B27/12' }],
+      ['HELOC Payments:', { f: '\'Inputs & Parameters\'!B28*12' }],
+      ['HELOC Monthly Payment:', { f: 'PMT(B8,B9,-\'Inputs & Parameters\'!B26)' }],
+      ['Total Holding Period:', { f: '\'Inputs & Parameters\'!B18+1' }],
+      ['HELOC Holding Costs:', { f: 'B10*B11' }],
       ['', ''],
       ['TOTAL INITIAL INVESTMENT', ''],
-      ['Initial Cash + Improvements:', '=B5'],
-      ['HELOC Holding Costs:', '=B12'],
-      ['Total Cash Investment:', '=B15+B16'],
+      ['Initial Cash + Improvements:', { f: 'B5' }],
+      ['HELOC Holding Costs:', { f: 'B12' }],
+      ['Total Cash Investment:', { f: 'B15+B16' }],
       ['', ''],
       ['REFINANCE ANALYSIS', ''],
-      ['ARV:', '=\'Inputs & Parameters\'.B29'],
-      ['70% LTV Limit:', '=B19*0.7'],
-      ['Time Constraint Active:', '=IF(\'Inputs & Parameters\'.B18<6,"YES","NO")'],
-      ['Time Constraint Limit:', '=IF(B21="YES",B4,B20)'],
-      ['Refinance Amount:', '=MIN(B20,B22)'],
+      ['ARV:', { f: '\'Inputs & Parameters\'!B29' }],
+      ['70% LTV Limit:', { f: 'B19*0.7' }],
+      ['Time Constraint Active:', { f: 'IF(\'Inputs & Parameters\'!B18<6,"YES","NO")' }],
+      ['Time Constraint Limit:', { f: 'IF(B21="YES",B4,B20)' }],
+      ['Refinance Amount:', { f: 'MIN(B20,B22)' }],
       ['Refinance Closing Costs:', 3000],
-      ['Net Cash Out:', '=B23-B24'],
+      ['Net Cash Out:', { f: 'B23-B24' }],
       ['', ''],
       ['FINAL INVESTMENT', ''],
-      ['Total Cash In:', '=B17'],
-      ['Less: Cash Out:', '=B25'],
-      ['Final Cash Investment:', '=B28-B29'],
+      ['Total Cash In:', { f: 'B17' }],
+      ['Less: Cash Out:', { f: 'B25' }],
+      ['Final Cash Investment:', { f: 'B28-B29' }],
       ['', ''],
       ['NEW MORTGAGE CALCULATION', ''],
-      ['Refinance Monthly Rate:', '=\'Inputs & Parameters\'.B30/12'],
-      ['Refinance Payments:', '=30*12'],
-      ['New Monthly Payment:', '=PMT(B33,B34,-B23)'],
+      ['Refinance Monthly Rate:', { f: '\'Inputs & Parameters\'!B30/12' }],
+      ['Refinance Payments:', { f: '30*12' }],
+      ['New Monthly Payment:', { f: 'PMT(B33,B34,-B23)' }],
       ['', ''],
       ['MONTHLY CASH FLOW', ''],
-      ['Monthly Rent:', '=\'Inputs & Parameters\'.B21'],
-      ['New Mortgage Payment:', '=B35'],
-      ['Monthly Property Taxes:', '=\'Inputs & Parameters\'.B22'],
-      ['Monthly Insurance:', '=\'Inputs & Parameters\'.B23'],
-      ['Other Monthly Expenses:', '=\'Inputs & Parameters\'.B24'],
-      ['Net Monthly Cash Flow:', '=B37-B38-B39-B40-B41'],
+      ['Monthly Rent:', { f: '\'Inputs & Parameters\'!B21' }],
+      ['New Mortgage Payment:', { f: 'B35' }],
+      ['Monthly Property Taxes:', { f: '\'Inputs & Parameters\'!B22' }],
+      ['Monthly Insurance:', { f: '\'Inputs & Parameters\'!B23' }],
+      ['Other Monthly Expenses:', { f: '\'Inputs & Parameters\'!B24' }],
+      ['Net Monthly Cash Flow:', { f: 'B37-B38-B39-B40-B41' }],
       ['', ''],
       ['ROI ANALYSIS', ''],
-      ['Annual Cash Flow:', '=B42*12'],
-      ['Final Investment:', '=B30'],
-      ['ROI Percentage:', '=B44/B45'],
-      ['Payback Period (Years):', '=B45/B44']
+      ['Annual Cash Flow:', { f: 'B42*12' }],
+      ['Final Investment:', { f: 'B30' }],
+      ['ROI Percentage:', { f: 'B44/B45' }],
+      ['Payback Period (Years):', { f: 'B45/B44' }]
     ];
   }
   
@@ -1694,35 +1694,35 @@ class ExcelExporter {
       ['', '', '', '', '', '', '']
     ];
     
-    const rentRef = 'Calculations.B' + (isHeloc ? '37' : '25');
-    const mortgageRef = 'Calculations.B' + (isHeloc ? '38' : '26');
-    const taxesRef = 'Calculations.B' + (isHeloc ? '39' : '27');
-    const insuranceRef = 'Calculations.B' + (isHeloc ? '40' : '28');
-    const otherRef = 'Calculations.B' + (isHeloc ? '41' : '29');
-    const cashFlowRef = 'Calculations.B' + (isHeloc ? '42' : '30');
+    const rentRef = 'Calculations!B' + (isHeloc ? '37' : '25');
+    const mortgageRef = 'Calculations!B' + (isHeloc ? '38' : '26');
+    const taxesRef = 'Calculations!B' + (isHeloc ? '39' : '27');
+    const insuranceRef = 'Calculations!B' + (isHeloc ? '40' : '28');
+    const otherRef = 'Calculations!B' + (isHeloc ? '41' : '29');
+    const cashFlowRef = 'Calculations!B' + (isHeloc ? '42' : '30');
     
-    // Add 12 months of data with formulas
+    // Add 12 months of data with formulas using proper XLSX formula object format
     for (let month = 1; month <= 12; month++) {
       data.push([
         month,
-        '=' + rentRef,
-        '=' + mortgageRef,
-        '=' + taxesRef,
-        '=' + insuranceRef,
-        '=' + otherRef,
-        '=' + cashFlowRef
+        { f: rentRef },
+        { f: mortgageRef },
+        { f: taxesRef },
+        { f: insuranceRef },
+        { f: otherRef },
+        { f: cashFlowRef }
       ]);
     }
     
-    // Add totals row with SUM formulas
+    // Add totals row with SUM formulas using proper XLSX formula object format
     data.push([
       'TOTAL',
-      '=SUM(B5:B16)',
-      '=SUM(C5:C16)',
-      '=SUM(D5:D16)',
-      '=SUM(E5:E16)',
-      '=SUM(F5:F16)',
-      '=SUM(G5:G16)'
+      { f: 'SUM(B5:B16)' },
+      { f: 'SUM(C5:C16)' },
+      { f: 'SUM(D5:D16)' },
+      { f: 'SUM(E5:E16)' },
+      { f: 'SUM(F5:F16)' },
+      { f: 'SUM(G5:G16)' }
     ]);
     
     return data;
@@ -1735,42 +1735,42 @@ class ExcelExporter {
       ['Strategy:', strategyName],
       ['', ''],
       ['PROPERTY INFORMATION', ''],
-      ['Asking Price:', '=\'Inputs & Parameters\'.B6'],
-      ['Purchase Price:', '=Calculations.B4'],
-      ['Discount Amount:', '=B6-B7'],
-      ['Discount Percentage:', '=B8/B6'],
+      ['Asking Price:', { f: '\'Inputs & Parameters\'!B6' }],
+      ['Purchase Price:', { f: 'Calculations!B4' }],
+      ['Discount Amount:', { f: 'B6-B7' }],
+      ['Discount Percentage:', { f: 'B8/B6' }],
       ['', ''],
       ['KEY PERFORMANCE METRICS', ''],
-      ['Annual ROI:', '=Calculations.B' + (isHeloc ? '46' : '35')],
-      ['Monthly Cash Flow:', '=Calculations.B' + (isHeloc ? '42' : '30')],
-      ['Annual Cash Flow:', '=Calculations.B' + (isHeloc ? '44' : '33')],
-      ['Payback Period (Years):', '=Calculations.B' + (isHeloc ? '47' : '36')],
+      ['Annual ROI:', { f: 'Calculations!B' + (isHeloc ? '46' : '35') }],
+      ['Monthly Cash Flow:', { f: 'Calculations!B' + (isHeloc ? '42' : '30') }],
+      ['Annual Cash Flow:', { f: 'Calculations!B' + (isHeloc ? '44' : '33') }],
+      ['Payback Period (Years):', { f: 'Calculations!B' + (isHeloc ? '47' : '36') }],
       ['', ''],
       ['INVESTMENT SUMMARY', ''],
-      ['Total Cash Investment:', '=Calculations.B' + (isHeloc ? '30' : '22')]
+      ['Total Cash Investment:', { f: 'Calculations!B' + (isHeloc ? '30' : '22') }]
     ];
     
     if (isHeloc) {
       baseData.push(
-        ['Cash Out (Refinance):', '=Calculations.B25'],
-        ['Final Cash Investment:', '=Calculations.B30']
+        ['Cash Out (Refinance):', { f: 'Calculations!B25' }],
+        ['Final Cash Investment:', { f: 'Calculations!B30' }]
       );
     }
     
     baseData.push(
       ['', ''],
       ['MONTHLY BREAKDOWN', ''],
-      ['Rental Income:', '=Calculations.B' + (isHeloc ? '37' : '25')],
-      ['Mortgage Payment:', '=Calculations.B' + (isHeloc ? '38' : '26')],
-      ['Property Taxes:', '=Calculations.B' + (isHeloc ? '39' : '27')],
-      ['Insurance:', '=Calculations.B' + (isHeloc ? '40' : '28')],
-      ['Other Expenses:', '=Calculations.B' + (isHeloc ? '41' : '29')],
-      ['Net Cash Flow:', '=Calculations.B' + (isHeloc ? '42' : '30')],
+      ['Rental Income:', { f: 'Calculations!B' + (isHeloc ? '37' : '25') }],
+      ['Mortgage Payment:', { f: 'Calculations!B' + (isHeloc ? '38' : '26') }],
+      ['Property Taxes:', { f: 'Calculations!B' + (isHeloc ? '39' : '27') }],
+      ['Insurance:', { f: 'Calculations!B' + (isHeloc ? '40' : '28') }],
+      ['Other Expenses:', { f: 'Calculations!B' + (isHeloc ? '41' : '29') }],
+      ['Net Cash Flow:', { f: 'Calculations!B' + (isHeloc ? '42' : '30') }],
       ['', ''],
       ['PERFORMANCE INDICATORS', ''],
-      ['Cash-on-Cash Return:', '=Calculations.B' + (isHeloc ? '46' : '35')],
-      ['Break-even Point:', '=Calculations.B' + (isHeloc ? '47' : '36')],
-      ['Monthly ROI:', '=Calculations.B' + (isHeloc ? '46' : '35') + '/12']
+      ['Cash-on-Cash Return:', { f: 'Calculations!B' + (isHeloc ? '46' : '35') }],
+      ['Break-even Point:', { f: 'Calculations!B' + (isHeloc ? '47' : '36') }],
+      ['Monthly ROI:', { f: 'Calculations!B' + (isHeloc ? '46' : '35') + '/12' }]
     );
     
     return baseData;
