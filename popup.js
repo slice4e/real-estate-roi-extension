@@ -132,6 +132,21 @@ class SettingsManager {
       ['defaultHelocTerm', settings.helocTerm], ['defaultSeasoningPeriod', settings.seasoningPeriod]
     ];
     fields.forEach(([id, value]) => Utils.setElementValue(id, value));
+    
+    // Also update advanced option fields to match settings
+    this.syncAdvancedFieldsWithSettings(settings);
+  }
+
+  static syncAdvancedFieldsWithSettings(settings) {
+    // Update conventional advanced options
+    Utils.setElementValue('interestRate', settings.interestRate);
+    Utils.setElementValue('percentDown', settings.downPayment);
+    
+    // Update HELOC advanced options
+    Utils.setElementValue('helocRate', settings.helocRate);
+    Utils.setElementValue('refinanceRate', settings.refinanceRate);
+    Utils.setElementValue('helocTerm', settings.helocTerm);
+    Utils.setElementValue('seasoningPeriod', settings.seasoningPeriod);
   }
 
   static getSettingsFromForm() {
@@ -600,10 +615,10 @@ class HelocROICalculator {
     Utils.logCalculation('Refinance calculation', {
       renovationPeriod: `${params.renovationPeriod} months`,
       purchasePriceLimit: params.renovationPeriod < CONFIG.thresholds.seasoningMonths 
-        ? `$${Utils.formatCurrency(purchasePrice)}` 
+        ? `${Utils.formatCurrency(purchasePrice)}` 
         : 'No limit',
-      arvLimit: `$${Utils.formatCurrency(maxRefinanceByARV)}`,
-      finalAmount: `$${Utils.formatCurrency(refinanceLoanAmount)}`
+      arvLimit: `${Utils.formatCurrency(maxRefinanceByARV)}`,
+      finalAmount: `${Utils.formatCurrency(refinanceLoanAmount)}`
     });
     
     const cashOut = refinanceLoanAmount - CONFIG.thresholds.refinanceClosingCosts;
@@ -731,54 +746,54 @@ class ResultsFormatter {
     
     return `
       <strong>INITIAL INVESTMENT:</strong><br>
-      - Purchase Price: $${Utils.formatCurrency(calculation.purchasePrice)}<br>
+      - Purchase Price: ${Utils.formatCurrency(calculation.purchasePrice)}<br>
       - Closing Costs: $1,000<br>
-      - Improvements: $${Utils.formatCurrency(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts)}<br>
-      - HELOC Payments (holding period only - ${Math.round(totalHoldingPeriod)} months): $${Utils.formatCurrency(calculation.holdingCosts)}<br>
+      - Improvements: ${Utils.formatCurrency(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts)}<br>
+      - HELOC Payments (holding period only - ${Math.round(totalHoldingPeriod)} months): ${Utils.formatCurrency(calculation.holdingCosts)}<br>
       <small style="color: #666;">  * HELOC paid off at refinance completion</small><br>
-      <strong>= Total Cash In: $${Utils.formatCurrency(calculation.totalCashIn)}</strong><br><br>
+      <strong>= Total Cash In: ${Utils.formatCurrency(calculation.totalCashIn)}</strong><br><br>
       
       <strong>REFINANCE RECOVERY:</strong><br>
-      - ARV (After Repair Value): $${Utils.formatCurrency(calculation.arv)}<br>
+      - ARV (After Repair Value): ${Utils.formatCurrency(calculation.arv)}<br>
       - Renovation Period: ${renovationPeriod} months ${hasTimeConstraint ? '(under 6 months)' : '(6+ months)'}<br>
-      - Standard Refinance Limit: 70% of ARV = $${Utils.formatCurrency(Math.round(calculation.arv * CONFIG.thresholds.refinanceLTV))}<br>
-      ${hasTimeConstraint ? `- Time Constraint: Cannot exceed purchase price = $${Utils.formatCurrency(calculation.purchasePrice)}<br>` : ''}
-      - Actual Refinance Loan Amount: $${Utils.formatCurrency(Math.round(calculation.refinanceLoanAmount))}<br>
-      - Refinance Closing Costs: -$${Utils.formatCurrency(CONFIG.thresholds.refinanceClosingCosts)}<br>
-      <strong>= Cash Out: $${Utils.formatCurrency(calculation.cashOut)}</strong><br><br>
+      - Standard Refinance Limit: 70% of ARV = ${Utils.formatCurrency(Math.round(calculation.arv * CONFIG.thresholds.refinanceLTV))}<br>
+      ${hasTimeConstraint ? `- Time Constraint: Cannot exceed purchase price = ${Utils.formatCurrency(calculation.purchasePrice)}<br>` : ''}
+      - Actual Refinance Loan Amount: ${Utils.formatCurrency(Math.round(calculation.refinanceLoanAmount))}<br>
+      - Refinance Closing Costs: -${Utils.formatCurrency(CONFIG.thresholds.refinanceClosingCosts)}<br>
+      <strong>= Cash Out: ${Utils.formatCurrency(calculation.cashOut)}</strong><br><br>
       
       <strong>FINAL INVESTMENT:</strong><br>
-      - Total Cash In: $${Utils.formatCurrency(calculation.totalCashIn)}<br>
-      - Cash Out: -$${Utils.formatCurrency(calculation.cashOut)}<br>
-      <strong>= Final Cash In: $${Utils.formatCurrency(calculation.finalCashIn)}</strong><br><br>
+      - Total Cash In: ${Utils.formatCurrency(calculation.totalCashIn)}<br>
+      - Cash Out: -${Utils.formatCurrency(calculation.cashOut)}<br>
+      <strong>= Final Cash In: ${Utils.formatCurrency(calculation.finalCashIn)}</strong><br><br>
       
       <strong>ROI CALCULATION:</strong><br>
       - Monthly Net Cash Flow (post-refinance): $${Math.round(calculation.monthlyCashFlowWithHeloc)}<br>
-      - Annual Cash Flow: $${Utils.formatCurrency(Math.round(calculation.annualCashFlow))}<br>
-      - Final Cash In: $${Utils.formatCurrency(calculation.finalCashIn)}<br>
-      <strong>= ROI: $${Utils.formatCurrency(Math.round(calculation.annualCashFlow))} / $${Utils.formatCurrency(calculation.finalCashIn)} = ${calculation.roi.toFixed(1)}%</strong>`;
+      - Annual Cash Flow: ${Utils.formatCurrency(Math.round(calculation.annualCashFlow))}<br>
+      - Final Cash In: ${Utils.formatCurrency(calculation.finalCashIn)}<br>
+      <strong>= ROI: ${Utils.formatCurrency(Math.round(calculation.annualCashFlow))} / ${Utils.formatCurrency(calculation.finalCashIn)} = ${calculation.roi.toFixed(1)}%</strong>`;
   }
   
   static formatConventionalDetails(calculation) {
     return `
       <strong>TOTAL INVESTMENT:</strong><br>
-      - Down Payment: $${Utils.formatCurrency(calculation.downPayment)}<br>
+      - Down Payment: ${Utils.formatCurrency(calculation.downPayment)}<br>
       - Closing Costs: $5,000<br>
-      - Improvements: $${Utils.formatCurrency(calculation.totalCashIn - calculation.downPayment - 5000 - calculation.holdingCosts)}<br>
-      - Holding Costs (${Math.round(calculation.holdingCosts / calculation.mortgagePayment)} months): $${Utils.formatCurrency(calculation.holdingCosts)}<br>
-      <strong>= Total Cash In: $${Utils.formatCurrency(calculation.totalCashIn)}</strong><br><br>
+      - Improvements: ${Utils.formatCurrency(calculation.totalCashIn - calculation.downPayment - 5000 - calculation.holdingCosts)}<br>
+      - Holding Costs (${Math.round(calculation.holdingCosts / calculation.mortgagePayment)} months): ${Utils.formatCurrency(calculation.holdingCosts)}<br>
+      <strong>= Total Cash In: ${Utils.formatCurrency(calculation.totalCashIn)}</strong><br><br>
       
       <strong>LOAN DETAILS:</strong><br>
-      - Purchase Price: $${Utils.formatCurrency(calculation.purchasePrice)}<br>
-      - Down Payment: $${Utils.formatCurrency(calculation.downPayment)}<br>
-      - Loan Amount: $${Utils.formatCurrency(calculation.loanAmount)}<br>
+      - Purchase Price: ${Utils.formatCurrency(calculation.purchasePrice)}<br>
+      - Down Payment: ${Utils.formatCurrency(calculation.downPayment)}<br>
+      - Loan Amount: ${Utils.formatCurrency(calculation.loanAmount)}<br>
       - Monthly Mortgage: $${Math.round(calculation.mortgagePayment)}<br><br>
       
       <strong>ROI CALCULATION:</strong><br>
       - Monthly Net Cash Flow: $${Math.round(calculation.monthlyCashFlow)}<br>
-      - Annual Cash Flow: $${Utils.formatCurrency(Math.round(calculation.annualCashFlow))}<br>
-      - Total Cash In: $${Utils.formatCurrency(calculation.totalCashIn)}<br>
-      <strong>= ROI: $${Utils.formatCurrency(Math.round(calculation.annualCashFlow))} / $${Utils.formatCurrency(calculation.totalCashIn)} = ${calculation.roi.toFixed(1)}%</strong>`;
+      - Annual Cash Flow: ${Utils.formatCurrency(Math.round(calculation.annualCashFlow))}<br>
+      - Total Cash In: ${Utils.formatCurrency(calculation.totalCashIn)}<br>
+      <strong>= ROI: ${Utils.formatCurrency(Math.round(calculation.annualCashFlow))} / ${Utils.formatCurrency(calculation.totalCashIn)} = ${calculation.roi.toFixed(1)}%</strong>`;
   }
 }
 
@@ -1407,6 +1422,33 @@ class EventHandlers {
 
     // Initialize all settings buttons
     this.initializeSettingsButtons();
+    
+    // Initialize settings field listeners to sync with advanced options
+    this.initializeSettingsFieldListeners();
+  }
+  
+  static initializeSettingsFieldListeners() {
+    // Map settings fields to their corresponding advanced option fields
+    const fieldMappings = [
+      ['defaultInterestRate', 'interestRate'],
+      ['defaultHelocRate', 'helocRate'],
+      ['defaultRefinanceRate', 'refinanceRate'],
+      ['defaultDownPayment', 'percentDown'],
+      ['defaultHelocTerm', 'helocTerm'],
+      ['defaultSeasoningPeriod', 'seasoningPeriod']
+    ];
+    
+    // Add event listeners to sync values in real-time
+    fieldMappings.forEach(([settingsFieldId, advancedFieldId]) => {
+      const settingsField = document.getElementById(settingsFieldId);
+      if (settingsField) {
+        settingsField.addEventListener('input', () => {
+          const value = parseFloat(settingsField.value) || 0;
+          Utils.setElementValue(advancedFieldId, value);
+          Utils.logCalculation(`Settings field ${settingsFieldId} changed, syncing to ${advancedFieldId}`, { value });
+        });
+      }
+    });
   }
   
   static initializeSettingsButtons() {
@@ -1450,6 +1492,7 @@ class EventHandlers {
       
       if (success) {
         SettingsManager.updateConfigWithSettings(settings);
+        SettingsManager.syncAdvancedFieldsWithSettings(settings);
         this.showButtonFeedback(saveBtn, 'Saved!', '#2e7d32', 'Save Settings', '#4caf50');
         
         if (appState.currentStrategy) FormDefaults.populate(appState.currentStrategy);
@@ -1503,19 +1546,57 @@ class ExcelExporter {
     }
     
     try {
-      const isHeloc = strategy === CONFIG.strategies.heloc;
-      const strategyName = isHeloc ? 'Cash + HELOC' : 'Conventional';
+      console.log('🏠 Starting Excel export...');
       const wb = XLSX.utils.book_new();
       
-      // Create all worksheets with formulas
+      // Get current form parameters for all strategies
+      const conventionalParams = new FormParameters(CONFIG.strategies.conventional).getAll();
+      const helocParams = new FormParameters(CONFIG.strategies.heloc).getAll();
+      
+      // Use conventional values as fallbacks for missing HELOC values
+      const params = { 
+        ...conventionalParams, 
+        ...helocParams,
+        // Ensure HELOC has a target purchase price (use conventional as fallback)
+        targetPurchasePriceHeloc: helocParams.targetPurchasePriceHeloc || conventionalParams.targetPurchasePriceConventional || 0
+      };
+      console.log('🏠 Form parameters:', params);
+      
+      // Use property data from current calculation or form parameters
+      const propertyData = {
+        price: calculation?.askingPrice || calculation?.purchasePrice || params.targetPurchasePriceConventional || 0,
+        annualTax: calculation?.annualTax || (params.propertyTaxes * 12) || 0
+      };
+      console.log('🏠 Property data:', propertyData);
+      
+      // Calculate both strategies for comprehensive analysis
+      console.log('🏠 Calculating conventional strategy...');
+      const conventionalCalc = ConventionalROICalculator.calculate(
+        propertyData.price || params.targetPurchasePriceConventional || 0,
+        propertyData.annualTax,
+        params
+      );
+      console.log('🏠 Conventional calc result:', conventionalCalc);
+      
+      console.log('🏠 Calculating HELOC strategy...');
+      const helocCalc = HelocROICalculator.calculate(
+        propertyData.price || params.targetPurchasePriceHeloc || 0,
+        propertyData.annualTax,
+        params
+      );
+      console.log('🏠 HELOC calc result:', helocCalc);
+      
+      // Create worksheets for the new 3-tab structure
+      console.log('🏠 Creating Excel sheets...');
       const sheets = [
-        ['Inputs & Parameters', this.createInputsSheet(appState.formParameters, propertyData, calculation, strategyName, isHeloc)],
-        ['Calculations', this.createCalculationsSheet(calculation, isHeloc)],
-        ['Cash Flow Analysis', this.createCashFlowSheetWithFormulas(isHeloc)],
-        ['Summary', this.createSummarySheetWithFormulas(propertyData, strategyName, isHeloc)]
+        ['Inputs & Parameters', this.createInputsSheet(appState.formParameters, propertyData)],
+        ['Conventional Strategy', this.createConventionalAnalysisSheet(conventionalCalc)],
+        ['Cash + HELOC Strategy', this.createHelocAnalysisSheet(helocCalc)]
       ];
       
+      console.log('🏠 Processing sheets...');
       sheets.forEach(([name, data]) => {
+        console.log(`🏠 Creating sheet: ${name}`);
         const ws = XLSX.utils.aoa_to_sheet(data);
         
         // Apply number formatting to currency cells
@@ -1525,29 +1606,41 @@ class ExcelExporter {
       });
       
       // Generate filename and download
-      const price = Math.round(calculation.purchasePrice / 1000);
-      const roi = calculation.roi.toFixed(1);
+      const price = Math.round((conventionalCalc.purchasePrice || helocCalc.purchasePrice) / 1000);
       const date = new Date().toISOString().split('T')[0];
-      const filename = `ROI_Analysis_${strategyName.replace(/\s+/g, '_')}_${price}k_${roi}pct_${date}.xlsx`;
+      const filename = `ROI_Analysis_Comparison_${price}k_${date}.xlsx`;
       
+      console.log('🏠 Generating Excel file:', filename);
       XLSX.writeFile(wb, filename);
+      console.log('🏠 Excel export completed successfully!');
     } catch (error) {
       console.error('🏠 Excel export error:', error);
-      alert('Error exporting to Excel. Please try again.');
+      console.error('🏠 Error stack:', error.stack);
+      alert('Error exporting to Excel: ' + error.message + '. Please try again.');
     }
   }
   
-  static createInputsSheet(formParameters, propertyData, calculation, strategyName, isHeloc) {
-    const params = formParameters.getAll();
+  static createInputsSheet(formParameters, propertyData) {
+    // Get all parameters including HELOC fields for export
+    const conventionalParams = new FormParameters(CONFIG.strategies.conventional).getAll();
+    const helocParams = new FormParameters(CONFIG.strategies.heloc).getAll();
+    const params = { ...conventionalParams, ...helocParams };
+    
+    console.log('🏠 HELOC Export Parameters:', {
+      helocAmount: params.helocAmount,
+      helocRate: params.helocRate,
+      arv: params.arv,
+      refinanceRate: params.refinanceRate
+    });
     const data = [
       ['Real Estate ROI Analysis - Input Parameters', ''],
-      ['Strategy:', strategyName],
       ['Generated on:', new Date().toLocaleString()],
       ['', ''],
       ['PROPERTY INFORMATION', ''],
-      ['Asking Price:', propertyData?.price || calculation?.askingPrice || 0],
-      ['Target Purchase Price:', isHeloc ? (params.targetPurchasePriceHeloc || 0) : (params.targetPurchasePriceConventional || 0)],
-      ['Annual Property Taxes:', calculation?.annualTax || (params.propertyTaxes * 12) || 0],
+      ['Asking Price:', propertyData?.price || 0],
+      ['Target Purchase Price (Conventional):', params.targetPurchasePriceConventional || 0],
+      ['Target Purchase Price (HELOC):', params.targetPurchasePriceHeloc || 0],
+      ['Annual Property Taxes:', (params.propertyTaxes * 12) || 0],
       ['', ''],
       ['LOAN PARAMETERS', ''],
       ['Down Payment %:', (params.percentDown || 0) / 100],
@@ -1563,36 +1656,23 @@ class ExcelExporter {
       ['Monthly Rent:', params.rent || 0],
       ['Monthly Property Taxes:', params.propertyTaxes || 0],
       ['Monthly Insurance:', params.insurance || 0],
-      ['Other Monthly Expenses:', params.otherMisc || 0]
+      ['Other Monthly Expenses:', params.otherMisc || 0],
+      ['', ''],
+      ['HELOC PARAMETERS', ''],
+      ['HELOC Amount:', params.helocAmount || 0],
+      ['HELOC Interest Rate %:', (params.helocRate || 0) / 100],
+      ['HELOC Term (Years):', params.helocTerm || 10],
+      ['ARV (After Repair Value):', params.arv || 0],
+      ['Refinance Rate %:', (params.refinanceRate || 0) / 100],
+      ['Seasoning Period (Months):', params.seasoningPeriod || 6]
     ];
-    
-    if (isHeloc) {
-      data.push(
-        ['', ''],
-        ['HELOC PARAMETERS', ''],
-        ['HELOC Amount:', params.helocAmount || 0],
-        ['HELOC Interest Rate %:', (params.helocRate || 0) / 100],
-        ['HELOC Term (Years):', params.helocTerm || 10],
-        ['ARV (After Repair Value):', params.arv || 0],
-        ['Refinance Rate %:', (params.refinanceRate || 0) / 100],
-        ['Seasoning Period (Months):', params.seasoningPeriod || 6]
-      );
-    }
-    
+
     return data;
   }
   
-  static createCalculationsSheet(calculation, isHeloc) {
-    if (isHeloc) {
-      return this.createHelocCalculationsWithFormulas();
-    } else {
-      return this.createConventionalCalculationsWithFormulas();
-    }
-  }
-  
-  static createConventionalCalculationsWithFormulas() {
-    return [
-      ['Conventional Financing - Calculations', ''],
+  static createConventionalAnalysisSheet(calculation) {
+    const data = [
+      ['Conventional Financing Strategy', ''],
       ['', ''],
       ['DERIVED VALUES', ''],
       ['Purchase Price:', { f: 'IF(\'Inputs & Parameters\'!B7>0,\'Inputs & Parameters\'!B7,\'Inputs & Parameters\'!B6)' }],
@@ -1600,9 +1680,9 @@ class ExcelExporter {
       ['Loan Amount:', { f: 'B4-B5' }],
       ['', ''],
       ['MORTGAGE CALCULATION', ''],
-      ['Monthly Interest Rate:', { f: '\'Inputs & Parameters\'!B12/12' }],
+      ['Monthly Interest Rate:', { f: '(\'Inputs & Parameters\'!B12/12)*100' }],
       ['Number of Payments:', { f: '\'Inputs & Parameters\'!B13*12' }],
-      ['Monthly Payment (P&I):', { f: 'PMT(B9,B10,-B6)' }],
+      ['Monthly Payment (P&I):', { f: 'PMT(\'Inputs & Parameters\'!B12/12,B10,-B6)' }],
       ['', ''],
       ['HOLDING COSTS', ''],
       ['Holding Period (Months):', { f: '\'Inputs & Parameters\'!B18' }],
@@ -1626,23 +1706,41 @@ class ExcelExporter {
       ['ROI ANALYSIS', ''],
       ['Annual Cash Flow:', { f: 'B30*12' }],
       ['Total Investment:', { f: 'B22' }],
-      ['ROI Percentage:', { f: 'B33/B34' }],
-      ['Payback Period (Years):', { f: 'B34/B33' }]
+      ['ROI Percentage:', { f: 'IF(B34=0,0,(B33/B34)*100)' }],
+      ['Payback Period (Years):', { f: 'IF(B33=0,0,B34/B33)' }],
+      ['', ''],
+      ['12-MONTH CASH FLOW PROJECTION', ''],
+      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow']
     ];
+    
+    // Add 12 months of cash flow projections
+    for (let month = 1; month <= 12; month++) {
+      data.push([
+        month,
+        { f: 'B25' },
+        { f: 'B26' },
+        { f: 'B27' },
+        { f: 'B28' },
+        { f: 'B29' },
+        { f: 'B30' }
+      ]);
+    }
+    
+    return data;
   }
-  
-  static createHelocCalculationsWithFormulas() {
-    return [
-      ['Cash + HELOC Strategy - Calculations', ''],
+
+  static createHelocAnalysisSheet(calculation) {
+    const data = [
+      ['Cash + HELOC Strategy', ''],
       ['', ''],
       ['DERIVED VALUES', ''],
       ['Purchase Price:', { f: 'IF(\'Inputs & Parameters\'!B7>0,\'Inputs & Parameters\'!B7,\'Inputs & Parameters\'!B6)' }],
       ['Initial Cash Required:', { f: 'B4+\'Inputs & Parameters\'!B16+\'Inputs & Parameters\'!B17' }],
       ['', ''],
       ['HELOC PAYMENTS', ''],
-      ['HELOC Monthly Rate:', { f: '\'Inputs & Parameters\'!B27/12' }],
-      ['HELOC Payments:', { f: '\'Inputs & Parameters\'!B28*12' }],
-      ['HELOC Monthly Payment:', { f: 'PMT(B8,B9,-\'Inputs & Parameters\'!B26)' }],
+      ['HELOC Monthly Rate:', { f: 'IF(\'Inputs & Parameters\'!B28=0,0,(\'Inputs & Parameters\'!B28/12)*100)' }],
+      ['HELOC Payments:', { f: '\'Inputs & Parameters\'!B29*12' }],
+      ['HELOC Monthly Payment:', { f: 'IF(OR(\'Inputs & Parameters\'!B28=0,\'Inputs & Parameters\'!B27=0),0,PMT(\'Inputs & Parameters\'!B28/12,B9,-\'Inputs & Parameters\'!B27))' }],
       ['Total Holding Period:', { f: '\'Inputs & Parameters\'!B18+1' }],
       ['HELOC Holding Costs:', { f: 'B10*B11' }],
       ['', ''],
@@ -1652,128 +1750,56 @@ class ExcelExporter {
       ['Total Cash Investment:', { f: 'B15+B16' }],
       ['', ''],
       ['REFINANCE ANALYSIS', ''],
-      ['ARV:', { f: '\'Inputs & Parameters\'!B29' }],
-      ['70% LTV Limit:', { f: 'B19*0.7' }],
+      ['ARV:', { f: '\'Inputs & Parameters\'!B30' }],
+      ['70% LTV Limit:', { f: 'B20*0.7' }],
       ['Time Constraint Active:', { f: 'IF(\'Inputs & Parameters\'!B18<6,"YES","NO")' }],
-      ['Time Constraint Limit:', { f: 'IF(B21="YES",B4,B20)' }],
-      ['Refinance Amount:', { f: 'MIN(B20,B22)' }],
+      ['Time Constraint Limit:', { f: 'IF(B22="YES",B4,B20)' }],
+      ['Refinance Amount:', { f: 'MIN(B21,B23)' }],
       ['Refinance Closing Costs:', 3000],
-      ['Net Cash Out:', { f: 'B23-B24' }],
+      ['Net Cash Out:', { f: 'IF(B24>B25,B24-B25,0)' }],
       ['', ''],
       ['FINAL INVESTMENT', ''],
       ['Total Cash In:', { f: 'B17' }],
-      ['Less: Cash Out:', { f: 'B25' }],
-      ['Final Cash Investment:', { f: 'B28-B29' }],
+      ['Less: Cash Out:', { f: 'B26' }],
+      ['Final Cash Investment:', { f: 'B29-B30' }],
       ['', ''],
       ['NEW MORTGAGE CALCULATION', ''],
-      ['Refinance Monthly Rate:', { f: '\'Inputs & Parameters\'!B30/12' }],
+      ['Refinance Monthly Rate:', { f: 'IF(\'Inputs & Parameters\'!B31=0,0,(\'Inputs & Parameters\'!B31/12)*100)' }],
       ['Refinance Payments:', { f: '30*12' }],
-      ['New Monthly Payment:', { f: 'PMT(B33,B34,-B23)' }],
+      ['New Monthly Payment:', { f: 'IF(OR(\'Inputs & Parameters\'!B31=0,B24=0),0,PMT(\'Inputs & Parameters\'!B31/12,B35,-B24))' }],
       ['', ''],
       ['MONTHLY CASH FLOW', ''],
       ['Monthly Rent:', { f: '\'Inputs & Parameters\'!B21' }],
-      ['New Mortgage Payment:', { f: 'B35' }],
+      ['New Mortgage Payment:', { f: 'B36' }],
       ['Monthly Property Taxes:', { f: '\'Inputs & Parameters\'!B22' }],
       ['Monthly Insurance:', { f: '\'Inputs & Parameters\'!B23' }],
       ['Other Monthly Expenses:', { f: '\'Inputs & Parameters\'!B24' }],
-      ['Net Monthly Cash Flow:', { f: 'B37-B38-B39-B40-B41' }],
+      ['Net Monthly Cash Flow:', { f: 'B39-B40-B41-B42-B43' }],
       ['', ''],
       ['ROI ANALYSIS', ''],
-      ['Annual Cash Flow:', { f: 'B42*12' }],
-      ['Final Investment:', { f: 'B30' }],
-      ['ROI Percentage:', { f: 'B44/B45' }],
-      ['Payback Period (Years):', { f: 'B45/B44' }]
-    ];
-  }
-  
-  static createCashFlowSheetWithFormulas(isHeloc) {
-    const data = [
-      ['Cash Flow Analysis - 12 Month Projection', '', '', '', '', '', ''],
-      ['', '', '', '', '', '', ''],
-      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow'],
-      ['', '', '', '', '', '', '']
+      ['Annual Cash Flow:', { f: 'B44*12' }],
+      ['Final Investment:', { f: 'B31' }],
+      ['ROI Percentage:', { f: 'IF(B48=0,0,(B47/B48)*100)' }],
+      ['Payback Period (Years):', { f: 'IF(B47=0,0,B48/B47)' }],
+      ['', ''],
+      ['12-MONTH CASH FLOW PROJECTION', ''],
+      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow']
     ];
     
-    const rentRef = 'Calculations!B' + (isHeloc ? '37' : '25');
-    const mortgageRef = 'Calculations!B' + (isHeloc ? '38' : '26');
-    const taxesRef = 'Calculations!B' + (isHeloc ? '39' : '27');
-    const insuranceRef = 'Calculations!B' + (isHeloc ? '40' : '28');
-    const otherRef = 'Calculations!B' + (isHeloc ? '41' : '29');
-    const cashFlowRef = 'Calculations!B' + (isHeloc ? '42' : '30');
-    
-    // Add 12 months of data with formulas using proper XLSX formula object format
+    // Add 12 months of cash flow projections
     for (let month = 1; month <= 12; month++) {
       data.push([
         month,
-        { f: rentRef },
-        { f: mortgageRef },
-        { f: taxesRef },
-        { f: insuranceRef },
-        { f: otherRef },
-        { f: cashFlowRef }
+        { f: 'B39' },
+        { f: 'B40' },
+        { f: 'B41' },
+        { f: 'B42' },
+        { f: 'B43' },
+        { f: 'B44' }
       ]);
     }
     
-    // Add totals row with SUM formulas using proper XLSX formula object format
-    data.push([
-      'TOTAL',
-      { f: 'SUM(B5:B16)' },
-      { f: 'SUM(C5:C16)' },
-      { f: 'SUM(D5:D16)' },
-      { f: 'SUM(E5:E16)' },
-      { f: 'SUM(F5:F16)' },
-      { f: 'SUM(G5:G16)' }
-    ]);
-    
     return data;
-  }
-  
-  static createSummarySheetWithFormulas(propertyData, strategyName, isHeloc) {
-    const baseData = [
-      ['Real Estate ROI Analysis - Executive Summary', ''],
-      ['Generated on:', new Date().toLocaleString()],
-      ['Strategy:', strategyName],
-      ['', ''],
-      ['PROPERTY INFORMATION', ''],
-      ['Asking Price:', { f: '\'Inputs & Parameters\'!B6' }],
-      ['Purchase Price:', { f: 'Calculations!B4' }],
-      ['Discount Amount:', { f: 'B6-B7' }],
-      ['Discount Percentage:', { f: 'B8/B6' }],
-      ['', ''],
-      ['KEY PERFORMANCE METRICS', ''],
-      ['Annual ROI:', { f: 'Calculations!B' + (isHeloc ? '46' : '35') }],
-      ['Monthly Cash Flow:', { f: 'Calculations!B' + (isHeloc ? '42' : '30') }],
-      ['Annual Cash Flow:', { f: 'Calculations!B' + (isHeloc ? '44' : '33') }],
-      ['Payback Period (Years):', { f: 'Calculations!B' + (isHeloc ? '47' : '36') }],
-      ['', ''],
-      ['INVESTMENT SUMMARY', ''],
-      ['Total Cash Investment:', { f: 'Calculations!B' + (isHeloc ? '30' : '22') }]
-    ];
-    
-    if (isHeloc) {
-      baseData.push(
-        ['Cash Out (Refinance):', { f: 'Calculations!B25' }],
-        ['Final Cash Investment:', { f: 'Calculations!B30' }]
-      );
-    }
-    
-    baseData.push(
-      ['', ''],
-      ['MONTHLY BREAKDOWN', ''],
-      ['Rental Income:', { f: 'Calculations!B' + (isHeloc ? '37' : '25') }],
-      ['Mortgage Payment:', { f: 'Calculations!B' + (isHeloc ? '38' : '26') }],
-      ['Property Taxes:', { f: 'Calculations!B' + (isHeloc ? '39' : '27') }],
-      ['Insurance:', { f: 'Calculations!B' + (isHeloc ? '40' : '28') }],
-      ['Other Expenses:', { f: 'Calculations!B' + (isHeloc ? '41' : '29') }],
-      ['Net Cash Flow:', { f: 'Calculations!B' + (isHeloc ? '42' : '30') }],
-      ['', ''],
-      ['PERFORMANCE INDICATORS', ''],
-      ['Cash-on-Cash Return:', { f: 'Calculations!B' + (isHeloc ? '46' : '35') }],
-      ['Break-even Point:', { f: 'Calculations!B' + (isHeloc ? '47' : '36') }],
-      ['Monthly ROI:', { f: 'Calculations!B' + (isHeloc ? '46' : '35') + '/12' }]
-    );
-    
-    return baseData;
   }
   
   static applyCellFormatting(ws, data) {
@@ -1793,11 +1819,25 @@ class ExcelExporter {
           // Check if it's a percentage cell (rate fields or percentage labels)
           if ((typeof cellValue === 'string' && cellValue.includes('%')) ||
               cellLabel.includes('Rate %') || 
-              cellLabel.includes('Down Payment %') ||
-              cellLabel.includes('ROI') ||
-              (cell.f && (cell.f.includes('/B6') || cell.f.includes('/B34') || 
-                         cell.f.includes('/B45') || cell.f.includes('/12')))) {
+              cellLabel.includes('Down Payment %')) {
             cell.z = '0.00%';
+          }
+          // Monthly Interest Rate should be percentage format (formula already multiplied by 100)
+          else if (cellLabel.includes('Monthly Interest Rate') || 
+                   cellLabel.includes('Monthly Rate') || 
+                   cellLabel.includes('Refinance Monthly Rate') ||
+                   cellLabel.includes('HELOC Monthly Rate')) {
+            cell.z = '0.00"%"';
+          }
+          // ROI and Discount cells already have *100 in formula, so use number format with % symbol
+          else if (cellLabel.includes('ROI') || cellLabel.includes('Discount Percentage')) {
+            cell.z = '0.00"%"';
+          }
+          // Number of Payments should be whole number format
+          else if (cellLabel.includes('Number of Payments') ||
+                   cellLabel.includes('HELOC Payments') ||
+                   cellLabel.includes('Refinance Payments')) {
+            cell.z = '0';
           }
           // Check if it's a currency cell (price, cost, payment, cash flow fields)
           else if (cellLabel.includes('Price') || 
