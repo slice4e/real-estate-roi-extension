@@ -1136,10 +1136,15 @@ class EventHandlers {
       return;
     }
     
-    exportBtn.addEventListener('click', () => {
+    exportBtn.addEventListener('click', async () => {
       const calculation = appState.calculateResults();
       if (calculation) {
-        ExcelExporter.export(calculation, appState.currentData, appState.currentStrategy);
+        try {
+          await ExcelExporter.export(calculation, appState.currentData, appState.currentStrategy);
+        } catch (error) {
+          console.error('🏠 Export error:', error);
+          alert('Error exporting to Excel. Please try again.');
+        }
       } else {
         alert('No calculation data available. Please calculate ROI first.');
       }
@@ -1538,8 +1543,43 @@ class EventHandlers {
 // EXCEL EXPORT FUNCTIONALITY
 // =====================================================
 
+class ExcelVariableMapper {
+  constructor() {
+    this.variables = new Map();
+    this.currentRow = 1;
+  }
+  
+  // Add a variable and track its cell location
+  addVariable(name, sheetName = 'Inputs & Parameters') {
+    const cell = `'${sheetName}'!B${this.currentRow}`;
+    this.variables.set(name, cell);
+    this.currentRow++;
+    return cell;
+  }
+  
+  // Get formula reference for a variable (returns full cell reference)
+  getRef(name) {
+    return this.variables.has(name) ? this.variables.get(name) : `#REF_${name}`;
+  }
+  
+  // Get local cell reference for current sheet calculations  
+  getLocalRef(rowOffset) {
+    return `B${this.currentRow + rowOffset}`;
+  }
+  
+  // Reset for a new sheet
+  resetRow(startRow = 1) {
+    this.currentRow = startRow;
+  }
+  
+  // Debug: get all variables
+  getAllVariables() {
+    return Object.fromEntries(this.variables);
+  }
+}
+
 class ExcelExporter {
-  static export(calculation, propertyData, strategy) {
+  static async export(calculation, propertyData, strategy) {
     if (typeof XLSX === 'undefined') {
       alert('Excel export library not loaded. Please try reloading the extension.');
       return;
@@ -1548,6 +1588,7 @@ class ExcelExporter {
     try {
       console.log('🏠 Starting Excel export...');
       const wb = XLSX.utils.book_new();
+      const mapper = new ExcelVariableMapper();
       
       // Get current form parameters for all strategies
       const conventionalParams = new FormParameters(CONFIG.strategies.conventional).getAll();
@@ -1563,25 +1604,29 @@ class ExcelExporter {
       console.log('🏠 Form parameters:', params);
       
       // Use property data from current calculation or form parameters
-      const propertyData = {
+      const propertyDataForExport = {
         price: calculation?.askingPrice || calculation?.purchasePrice || params.targetPurchasePriceConventional || 0,
         annualTax: calculation?.annualTax || (params.propertyTaxes * 12) || 0
       };
-      console.log('🏠 Property data:', propertyData);
+      console.log('🏠 Property data:', propertyDataForExport);
+      
+      // Get the property URL asynchronously
+      const propertyUrl = await this.getPropertyUrl();
+      console.log('🏠 Property URL:', propertyUrl);
       
       // Calculate both strategies for comprehensive analysis
       console.log('🏠 Calculating conventional strategy...');
       const conventionalCalc = ConventionalROICalculator.calculate(
-        propertyData.price || params.targetPurchasePriceConventional || 0,
-        propertyData.annualTax,
+        propertyDataForExport.price || params.targetPurchasePriceConventional || 0,
+        propertyDataForExport.annualTax,
         params
       );
       console.log('🏠 Conventional calc result:', conventionalCalc);
       
       console.log('🏠 Calculating HELOC strategy...');
       const helocCalc = HelocROICalculator.calculate(
-        propertyData.price || params.targetPurchasePriceHeloc || 0,
-        propertyData.annualTax,
+        propertyDataForExport.price || params.targetPurchasePriceHeloc || 0,
+        propertyDataForExport.annualTax,
         params
       );
       console.log('🏠 HELOC calc result:', helocCalc);
@@ -1589,9 +1634,9 @@ class ExcelExporter {
       // Create worksheets for the new 3-tab structure
       console.log('🏠 Creating Excel sheets...');
       const sheets = [
-        ['Inputs & Parameters', this.createInputsSheet(appState.formParameters, propertyData)],
-        ['Conventional Strategy', this.createConventionalAnalysisSheet(conventionalCalc)],
-        ['Cash + HELOC Strategy', this.createHelocAnalysisSheet(helocCalc)]
+        ['Inputs & Parameters', this.createInputsSheet(params, propertyDataForExport, mapper, propertyUrl)],
+        ['Conventional Strategy', this.createConventionalAnalysisSheet(conventionalCalc, mapper)],
+        ['Cash + HELOC Strategy', this.createHelocAnalysisSheet(helocCalc, mapper)]
       ];
       
       console.log('🏠 Processing sheets...');
@@ -1605,10 +1650,11 @@ class ExcelExporter {
         XLSX.utils.book_append_sheet(wb, ws, name);
       });
       
-      // Generate filename and download
-      const price = Math.round((conventionalCalc.purchasePrice || helocCalc.purchasePrice) / 1000);
-      const date = new Date().toISOString().split('T')[0];
-      const filename = `ROI_Analysis_Comparison_${price}k_${date}.xlsx`;
+      // Debug: Log all variable mappings
+      console.log('🏠 Variable mappings:', mapper.getAllVariables());
+      
+      // Generate filename based on property address or price
+      const filename = this.generateFilename(propertyDataForExport, conventionalCalc, helocCalc, propertyUrl);
       
       console.log('🏠 Generating Excel file:', filename);
       XLSX.writeFile(wb, filename);
@@ -1619,22 +1665,22 @@ class ExcelExporter {
       alert('Error exporting to Excel: ' + error.message + '. Please try again.');
     }
   }
-  
-  static createInputsSheet(formParameters, propertyData) {
-    // Get all parameters including HELOC fields for export
-    const conventionalParams = new FormParameters(CONFIG.strategies.conventional).getAll();
-    const helocParams = new FormParameters(CONFIG.strategies.heloc).getAll();
-    const params = { ...conventionalParams, ...helocParams };
-    
+
+  static createInputsSheet(params, propertyData, mapper, propertyUrl = 'Property URL not available') {
     console.log('🏠 HELOC Export Parameters:', {
       helocAmount: params.helocAmount,
       helocRate: params.helocRate,
       arv: params.arv,
       refinanceRate: params.refinanceRate
     });
+    
+    // Reset mapper for this sheet
+    mapper.resetRow(1);
+    
     const data = [
       ['Real Estate ROI Analysis - Input Parameters', ''],
       ['Generated on:', new Date().toLocaleString()],
+      ['Property URL:', propertyUrl],
       ['', ''],
       ['PROPERTY INFORMATION', ''],
       ['Asking Price:', propertyData?.price || 0],
@@ -1666,136 +1712,175 @@ class ExcelExporter {
       ['Refinance Rate %:', (params.refinanceRate || 0) / 100],
       ['Seasoning Period (Months):', params.seasoningPeriod || 6]
     ];
+    
+    // Define variable mappings (track their row positions)
+    mapper.currentRow = 6;  // Target Purchase Price (Conventional)
+    mapper.addVariable('TargetPurchasePriceConventional');
+    mapper.currentRow = 7;  // Target Purchase Price (HELOC)  
+    mapper.addVariable('TargetPurchasePriceHeloc');
+    mapper.currentRow = 11; // Down Payment %
+    mapper.addVariable('DownPaymentPercent');
+    mapper.currentRow = 12; // Interest Rate %
+    mapper.addVariable('InterestRate');
+    mapper.currentRow = 13; // Loan Term (Years)
+    mapper.addVariable('LoanTerm');
+    mapper.currentRow = 16; // Closing Costs
+    mapper.addVariable('ClosingCosts');
+    mapper.currentRow = 17; // Improvements/Renovation
+    mapper.addVariable('Improvements');
+    mapper.currentRow = 18; // Renovation Period (Months)
+    mapper.addVariable('RenovationPeriod');
+    mapper.currentRow = 21; // Monthly Rent
+    mapper.addVariable('MonthlyRent');
+    mapper.currentRow = 22; // Monthly Property Taxes
+    mapper.addVariable('MonthlyPropertyTaxes');
+    mapper.currentRow = 23; // Monthly Insurance
+    mapper.addVariable('MonthlyInsurance');
+    mapper.currentRow = 24; // Other Monthly Expenses
+    mapper.addVariable('OtherMonthlyExpenses');
+    mapper.currentRow = 27; // HELOC Amount
+    mapper.addVariable('HelocAmount');
+    mapper.currentRow = 28; // HELOC Interest Rate %
+    mapper.addVariable('HelocRate');
+    mapper.currentRow = 29; // HELOC Term (Years)
+    mapper.addVariable('HelocTerm');
+    mapper.currentRow = 30; // ARV (After Repair Value)
+    mapper.addVariable('ARV');
+    mapper.currentRow = 31; // Refinance Rate %
+    mapper.addVariable('RefinanceRate');
+    mapper.currentRow = 32; // Seasoning Period
+    mapper.addVariable('SeasoningPeriod');
+    
+    console.log('🏠 ARV cell reference:', mapper.getRef('ARV'));
+    console.log('🏠 Sample formula will be:', `${mapper.getRef('ARV')}*0.7`);
 
     return data;
   }
   
-  static createConventionalAnalysisSheet(calculation) {
+  static createConventionalAnalysisSheet(calculation, mapper) {
     const data = [
-      ['Conventional Financing Strategy', ''],
-      ['', ''],
-      ['DERIVED VALUES', ''],
-      ['Purchase Price:', { f: 'IF(\'Inputs & Parameters\'!B7>0,\'Inputs & Parameters\'!B7,\'Inputs & Parameters\'!B6)' }],
-      ['Down Payment:', { f: 'B4*\'Inputs & Parameters\'!B11' }],
-      ['Loan Amount:', { f: 'B4-B5' }],
-      ['', ''],
-      ['MORTGAGE CALCULATION', ''],
-      ['Monthly Interest Rate:', { f: '(\'Inputs & Parameters\'!B12/12)*100' }],
-      ['Number of Payments:', { f: '\'Inputs & Parameters\'!B13*12' }],
-      ['Monthly Payment (P&I):', { f: 'PMT(\'Inputs & Parameters\'!B12/12,B10,-B6)' }],
-      ['', ''],
-      ['HOLDING COSTS', ''],
-      ['Holding Period (Months):', { f: '\'Inputs & Parameters\'!B18' }],
-      ['Total Holding Costs:', { f: 'B11*B14' }],
-      ['', ''],
-      ['TOTAL INVESTMENT', ''],
-      ['Down Payment:', { f: 'B5' }],
-      ['Closing Costs:', { f: '\'Inputs & Parameters\'!B16' }],
-      ['Improvements:', { f: '\'Inputs & Parameters\'!B17' }],
-      ['Holding Costs:', { f: 'B15' }],
-      ['Total Cash Investment:', { f: 'B18+B19+B20+B21' }],
-      ['', ''],
-      ['MONTHLY CASH FLOW', ''],
-      ['Monthly Rent:', { f: '\'Inputs & Parameters\'!B21' }],
-      ['Monthly Mortgage (P&I):', { f: 'B11' }],
-      ['Monthly Property Taxes:', { f: '\'Inputs & Parameters\'!B22' }],
-      ['Monthly Insurance:', { f: '\'Inputs & Parameters\'!B23' }],
-      ['Other Monthly Expenses:', { f: '\'Inputs & Parameters\'!B24' }],
-      ['Net Monthly Cash Flow:', { f: 'B25-B26-B27-B28-B29' }],
-      ['', ''],
-      ['ROI ANALYSIS', ''],
-      ['Annual Cash Flow:', { f: 'B30*12' }],
-      ['Total Investment:', { f: 'B22' }],
-      ['ROI Percentage:', { f: 'IF(B34=0,0,(B33/B34)*100)' }],
-      ['Payback Period (Years):', { f: 'IF(B33=0,0,B34/B33)' }],
-      ['', ''],
-      ['12-MONTH CASH FLOW PROJECTION', ''],
-      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow']
+      ['Conventional Financing Strategy', ''],                          // Row 1
+      ['', ''],                                                        // Row 2
+      ['TOTAL INVESTMENT', ''],                                        // Row 3
+      ['Purchase Price:', { f: mapper.getRef('TargetPurchasePriceConventional') }], // Row 4
+      ['Down Payment:', { f: `B4*${mapper.getRef('DownPaymentPercent')}` }], // Row 5
+      ['Closing Costs:', { f: mapper.getRef('ClosingCosts') }],       // Row 6
+      ['Improvements:', { f: mapper.getRef('Improvements') }],         // Row 7
+      ['Holding Costs:', { f: `PMT(${mapper.getRef('InterestRate')}/12,${mapper.getRef('LoanTerm')}*12,-(B4-B5))*${mapper.getRef('RenovationPeriod')}` }], // Row 8
+      ['Total Cash Investment:', { f: 'B5+B6+B7+B8' }],               // Row 9
+      ['', ''],                                                        // Row 10
+      ['LOAN DETAILS', ''],                                            // Row 11
+      ['Purchase Price:', { f: 'B4' }],                               // Row 12
+      ['Down Payment:', { f: 'B5' }],                                 // Row 13
+      ['Loan Amount:', { f: 'B4-B5' }],                               // Row 14
+      ['Interest Rate (Annual):', { f: `${mapper.getRef('InterestRate')}*100` }], // Row 15
+      ['Loan Term (Years):', { f: mapper.getRef('LoanTerm') }],       // Row 16
+      ['Monthly Mortgage Payment:', { f: `PMT(${mapper.getRef('InterestRate')}/12,${mapper.getRef('LoanTerm')}*12,-B14)` }], // Row 17
+      ['', ''],                                                        // Row 18
+      ['MONTHLY CASH FLOW', ''],                                       // Row 19
+      ['Monthly Rent:', { f: mapper.getRef('MonthlyRent') }],         // Row 20
+      ['Monthly Mortgage (P&I):', { f: 'B17' }],                      // Row 21
+      ['Monthly Property Taxes:', { f: mapper.getRef('MonthlyPropertyTaxes') }], // Row 22
+      ['Monthly Insurance:', { f: mapper.getRef('MonthlyInsurance') }], // Row 23
+      ['Other Monthly Expenses:', { f: mapper.getRef('OtherMonthlyExpenses') }], // Row 24
+      ['Net Monthly Cash Flow:', { f: 'B20-B21-B22-B23-B24' }],       // Row 25
+      ['', ''],                                                        // Row 26
+      ['ROI CALCULATION', ''],                                         // Row 27
+      ['Monthly Net Cash Flow:', { f: 'B25' }],                       // Row 28
+      ['Annual Cash Flow:', { f: 'B28*12' }],                         // Row 29
+      ['Total Cash Investment:', { f: 'B9' }],                        // Row 30
+      ['ROI Percentage:', { f: 'IF(B30=0,0,(B29/B30)*100)' }],       // Row 31
+      ['Payback Period (Years):', { f: 'IF(B29=0,0,B30/B29)' }],     // Row 32
+      ['', ''],                                                        // Row 33
+      ['12-MONTH CASH FLOW PROJECTION', ''],                          // Row 34
+      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow'] // Row 35
     ];
     
     // Add 12 months of cash flow projections
     for (let month = 1; month <= 12; month++) {
       data.push([
         month,
-        { f: 'B25' },
-        { f: 'B26' },
-        { f: 'B27' },
-        { f: 'B28' },
-        { f: 'B29' },
-        { f: 'B30' }
+        { f: 'B20' },  // Monthly Rent
+        { f: 'B21' },  // Monthly Mortgage (P&I)
+        { f: 'B22' },  // Monthly Property Taxes
+        { f: 'B23' },  // Monthly Insurance
+        { f: 'B24' },  // Other Monthly Expenses
+        { f: 'B25' }   // Net Monthly Cash Flow
       ]);
     }
     
     return data;
   }
 
-  static createHelocAnalysisSheet(calculation) {
+  static createHelocAnalysisSheet(calculation, mapper) {
     const data = [
-      ['Cash + HELOC Strategy', ''],
-      ['', ''],
-      ['DERIVED VALUES', ''],
-      ['Purchase Price:', { f: 'IF(\'Inputs & Parameters\'!B7>0,\'Inputs & Parameters\'!B7,\'Inputs & Parameters\'!B6)' }],
-      ['Initial Cash Required:', { f: 'B4+\'Inputs & Parameters\'!B16+\'Inputs & Parameters\'!B17' }],
-      ['', ''],
-      ['HELOC PAYMENTS', ''],
-      ['HELOC Monthly Rate:', { f: 'IF(\'Inputs & Parameters\'!B28=0,0,(\'Inputs & Parameters\'!B28/12)*100)' }],
-      ['HELOC Payments:', { f: '\'Inputs & Parameters\'!B29*12' }],
-      ['HELOC Monthly Payment:', { f: 'IF(OR(\'Inputs & Parameters\'!B28=0,\'Inputs & Parameters\'!B27=0),0,PMT(\'Inputs & Parameters\'!B28/12,B9,-\'Inputs & Parameters\'!B27))' }],
-      ['Total Holding Period:', { f: '\'Inputs & Parameters\'!B18+1' }],
-      ['HELOC Holding Costs:', { f: 'B10*B11' }],
-      ['', ''],
-      ['TOTAL INITIAL INVESTMENT', ''],
-      ['Initial Cash + Improvements:', { f: 'B5' }],
-      ['HELOC Holding Costs:', { f: 'B12' }],
-      ['Total Cash Investment:', { f: 'B15+B16' }],
-      ['', ''],
-      ['REFINANCE ANALYSIS', ''],
-      ['ARV:', { f: '\'Inputs & Parameters\'!B30' }],
-      ['70% LTV Limit:', { f: 'B20*0.7' }],
-      ['Time Constraint Active:', { f: 'IF(\'Inputs & Parameters\'!B18<6,"YES","NO")' }],
-      ['Time Constraint Limit:', { f: 'IF(B22="YES",B4,B20)' }],
-      ['Refinance Amount:', { f: 'MIN(B21,B23)' }],
-      ['Refinance Closing Costs:', 3000],
-      ['Net Cash Out:', { f: 'IF(B24>B25,B24-B25,0)' }],
-      ['', ''],
-      ['FINAL INVESTMENT', ''],
-      ['Total Cash In:', { f: 'B17' }],
-      ['Less: Cash Out:', { f: 'B26' }],
-      ['Final Cash Investment:', { f: 'B29-B30' }],
-      ['', ''],
-      ['NEW MORTGAGE CALCULATION', ''],
-      ['Refinance Monthly Rate:', { f: 'IF(\'Inputs & Parameters\'!B31=0,0,(\'Inputs & Parameters\'!B31/12)*100)' }],
-      ['Refinance Payments:', { f: '30*12' }],
-      ['New Monthly Payment:', { f: 'IF(OR(\'Inputs & Parameters\'!B31=0,B24=0),0,PMT(\'Inputs & Parameters\'!B31/12,B35,-B24))' }],
-      ['', ''],
-      ['MONTHLY CASH FLOW', ''],
-      ['Monthly Rent:', { f: '\'Inputs & Parameters\'!B21' }],
-      ['New Mortgage Payment:', { f: 'B36' }],
-      ['Monthly Property Taxes:', { f: '\'Inputs & Parameters\'!B22' }],
-      ['Monthly Insurance:', { f: '\'Inputs & Parameters\'!B23' }],
-      ['Other Monthly Expenses:', { f: '\'Inputs & Parameters\'!B24' }],
-      ['Net Monthly Cash Flow:', { f: 'B39-B40-B41-B42-B43' }],
-      ['', ''],
-      ['ROI ANALYSIS', ''],
-      ['Annual Cash Flow:', { f: 'B44*12' }],
-      ['Final Investment:', { f: 'B31' }],
-      ['ROI Percentage:', { f: 'IF(B48=0,0,(B47/B48)*100)' }],
-      ['Payback Period (Years):', { f: 'IF(B47=0,0,B48/B47)' }],
-      ['', ''],
-      ['12-MONTH CASH FLOW PROJECTION', ''],
-      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow']
+      ['Cash + HELOC Strategy', ''],                                   // Row 1
+      ['', ''],                                                        // Row 2
+      ['INITIAL INVESTMENT', ''],                                      // Row 3
+      ['Purchase Price:', { f: `IF(${mapper.getRef('TargetPurchasePriceHeloc')}>0,${mapper.getRef('TargetPurchasePriceHeloc')},${mapper.getRef('TargetPurchasePriceConventional')})` }], // Row 4
+      ['Closing Costs:', 1000],                                       // Row 5 - Hardcoded $1,000 for HELOC strategy
+      ['Improvements:', { f: mapper.getRef('Improvements') }],         // Row 6
+      ['Initial Cash Required:', { f: 'B4+B5+B6' }],                  // Row 7
+      ['', ''],                                                        // Row 8
+      ['HELOC PAYMENTS (During Renovation)', ''],                      // Row 9
+      ['HELOC Amount:', { f: mapper.getRef('HelocAmount') }],         // Row 10
+      ['HELOC Rate (Annual):', { f: `${mapper.getRef('HelocRate')}*100` }], // Row 11
+      ['HELOC Term (Years):', { f: mapper.getRef('HelocTerm') }],     // Row 12
+      ['Monthly HELOC Payment:', { f: `IF(OR(${mapper.getRef('HelocRate')}=0,${mapper.getRef('HelocAmount')}=0),0,PMT(${mapper.getRef('HelocRate')}/12,${mapper.getRef('HelocTerm')}*12,-${mapper.getRef('HelocAmount')}))` }], // Row 13
+      ['Renovation Period (Months):', { f: mapper.getRef('RenovationPeriod') }], // Row 14
+      ['Total HELOC Holding Costs:', { f: 'B13*B14' }],               // Row 15
+      ['Total Cash In:', { f: 'B7+B15' }],                            // Row 16
+      ['', ''],                                                        // Row 17
+      ['REFINANCE RECOVERY', ''],                                      // Row 18
+      ['ARV (After Repair Value):', { f: mapper.getRef('ARV') }],     // Row 19
+      ['70% LTV Limit:', { f: `${mapper.getRef('ARV')}*0.7` }],       // Row 20
+      ['Renovation Period (Months):', { f: 'B14' }],                  // Row 21
+      ['Time Constraint Active:', { f: `IF(B21<6,"YES","NO")` }],     // Row 22
+      ['Time Constraint Limit:', { f: `IF(B22="YES",B4,B19)` }],      // Row 23
+      ['Refinance Amount:', { f: 'MIN(B20,B23)' }],                   // Row 24
+      ['Refinance Closing Costs:', 3000],                             // Row 25
+      ['Net Cash Out from Refinance:', { f: 'IF(B24>B25,B24-B25,0)' }], // Row 26
+      ['', ''],                                                        // Row 27
+      ['FINAL INVESTMENT', ''],                                        // Row 28
+      ['Total Cash In:', { f: 'B16' }],                               // Row 29
+      ['Less: Cash Out from Refinance:', { f: 'B26' }],               // Row 30
+      ['Final Cash Investment:', { f: 'B29-B30' }],                   // Row 31
+      ['', ''],                                                        // Row 32
+      ['NEW MORTGAGE DETAILS', ''],                                    // Row 33
+      ['Refinance Amount:', { f: 'B24' }],                            // Row 34
+      ['Refinance Rate (Annual):', { f: `${mapper.getRef('RefinanceRate')}*100` }], // Row 35
+      ['Loan Term (Years):', 30],                                     // Row 36
+      ['New Monthly Mortgage Payment:', { f: `IF(OR(${mapper.getRef('RefinanceRate')}=0,B34=0),0,PMT(${mapper.getRef('RefinanceRate')}/12,B36*12,-B34))` }], // Row 37
+      ['', ''],                                                        // Row 38
+      ['MONTHLY CASH FLOW', ''],                                       // Row 39
+      ['Monthly Rent:', { f: mapper.getRef('MonthlyRent') }],         // Row 40
+      ['Monthly Mortgage (P&I):', { f: 'B37' }],                      // Row 41
+      ['Monthly Property Taxes:', { f: mapper.getRef('MonthlyPropertyTaxes') }], // Row 42
+      ['Monthly Insurance:', { f: mapper.getRef('MonthlyInsurance') }], // Row 43
+      ['Other Monthly Expenses:', { f: mapper.getRef('OtherMonthlyExpenses') }], // Row 44
+      ['Net Monthly Cash Flow:', { f: 'B40-B41-B42-B43-B44' }],       // Row 45
+      ['', ''],                                                        // Row 46
+      ['ROI CALCULATION', ''],                                         // Row 47
+      ['Monthly Net Cash Flow:', { f: 'B45' }],                       // Row 48
+      ['Annual Cash Flow:', { f: 'B48*12' }],                         // Row 49
+      ['Final Cash Investment:', { f: 'B31' }],                       // Row 50
+      ['ROI Percentage:', { f: 'IF(B50=0,0,(B49/B50)*100)' }],       // Row 51
+      ['Payback Period (Years):', { f: 'IF(B49=0,0,B50/B49)' }],     // Row 52
+      ['', ''],                                                        // Row 53
+      ['12-MONTH CASH FLOW PROJECTION', ''],                          // Row 54
+      ['Month', 'Rental Income', 'Mortgage', 'Taxes', 'Insurance', 'Other', 'Net Cash Flow'] // Row 55
     ];
     
     // Add 12 months of cash flow projections
     for (let month = 1; month <= 12; month++) {
       data.push([
         month,
-        { f: 'B39' },
-        { f: 'B40' },
-        { f: 'B41' },
-        { f: 'B42' },
-        { f: 'B43' },
-        { f: 'B44' }
+        { f: 'B40' },  // Monthly Rent
+        { f: 'B41' },  // Monthly Mortgage (P&I)
+        { f: 'B42' },  // Monthly Property Taxes
+        { f: 'B43' },  // Monthly Insurance
+        { f: 'B44' },  // Other Monthly Expenses
+        { f: 'B45' }   // Net Monthly Cash Flow
       ]);
     }
     
@@ -1916,6 +2001,199 @@ class ExcelExporter {
   static formatCurrency(amount) {
     if (typeof amount === 'string') return amount;
     return `$${amount.toLocaleString()}`;
+  }
+  
+  static generateFilename(propertyData, conventionalCalc, helocCalc, propertyUrl = null) {
+    try {
+      let addressPart = '';
+      
+      // First priority: Extract address from the captured property URL
+      if (propertyUrl && propertyUrl !== 'Property URL not available') {
+        addressPart = this.extractAddressFromText(propertyUrl);
+        console.log('🏠 Address from property URL:', addressPart);
+      }
+      
+      // Second priority: Extract address from document title
+      if (!addressPart && document.title) {
+        addressPart = this.extractAddressFromText(document.title);
+        console.log('🏠 Address from document title:', addressPart);
+      }
+      
+      // Third priority: Try current window location (though this will be extension URL)
+      if (!addressPart && window.location) {
+        addressPart = this.extractAddressFromText(window.location.href);
+        console.log('🏠 Address from window location:', addressPart);
+      }
+      
+      // If still no address, try to get it from property data or use price as fallback
+      if (!addressPart) {
+        const price = Math.round((conventionalCalc.purchasePrice || helocCalc.purchasePrice) / 1000);
+        addressPart = `${price}k_Property`;
+      }
+      
+      // Add date
+      const date = new Date().toISOString().split('T')[0];
+      
+      // Sanitize filename
+      const sanitizedAddress = this.sanitizeFilename(addressPart);
+      
+      return `ROI_Analysis_${sanitizedAddress}_${date}.xlsx`;
+    } catch (error) {
+      console.warn('🏠 Error generating custom filename, using fallback:', error);
+      // Fallback to original format
+      const price = Math.round((conventionalCalc.purchasePrice || helocCalc.purchasePrice) / 1000);
+      const date = new Date().toISOString().split('T')[0];
+      return `ROI_Analysis_${price}k_${date}.xlsx`;
+    }
+  }
+  
+  static getCurrentPageUrl() {
+    try {
+      // Get URL from the active tab using chrome.tabs API
+      return new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.tabs) {
+          chrome.tabs.query({active: true, currentWindow: true}, (tabs) => {
+            if (tabs[0] && tabs[0].url) {
+              resolve(tabs[0].url);
+            } else {
+              resolve('Property URL not available');
+            }
+          });
+        } else {
+          resolve('Property URL not available');
+        }
+      });
+    } catch (error) {
+      console.warn('🏠 Error getting current page URL:', error);
+      return Promise.resolve('Property URL not available');
+    }
+  }
+
+  static async getPropertyUrl() {
+    try {
+      return await this.getCurrentPageUrl();
+    } catch (error) {
+      console.warn('🏠 Error getting property URL:', error);
+      return 'Property URL not available';
+    }
+  }
+
+  static extractAddressFromText(text) {
+    if (!text) return null;
+    
+    // Try URL-specific address extraction first
+    if (text.includes('http') || text.includes('www') || text.includes('.com')) {
+      const urlAddress = this.extractAddressFromUrl(text);
+      if (urlAddress) return urlAddress;
+    }
+    
+    // Remove common website prefixes and suffixes
+    let cleaned = text.replace(/(https?:\/\/)|(www\.)|(\.(com|org|net)).*$/gi, '');
+    
+    // Look for address patterns (numbers followed by words, street types)
+    const addressPatterns = [
+      // "123 Main St" or "456 Oak Avenue"  
+      /(\d+\s+[A-Za-z\s]+(St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Pl|Place|Way|Blvd|Boulevard))/i,
+      // "Main Street 123" (reverse format)
+      /([A-Za-z\s]+(St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Ct|Court|Pl|Place|Way|Blvd|Boulevard)\s+\d+)/i,
+      // Just house number and first word (like "123 Main")
+      /(\d{1,5}\s+[A-Za-z]+)/,
+    ];
+    
+    for (let pattern of addressPatterns) {
+      const match = cleaned.match(pattern);
+      if (match) {
+        return match[1].trim();
+      }
+    }
+    
+    // If no pattern found, try to extract meaningful parts from URL or title
+    // Remove common real estate site names
+    cleaned = cleaned.replace(/(redfin|zillow|realtor|mls)/gi, '');
+    
+    // Get the first few meaningful words (skip single letters and numbers)
+    const words = cleaned.split(/[\s\-_\/]+/)
+      .filter(word => word.length > 1 && !/^\d+$/.test(word))
+      .slice(0, 3)
+      .join('_');
+    
+    return words.length > 0 ? words : null;
+  }
+  
+  static extractAddressFromUrl(url) {
+    if (!url) return null;
+    
+    try {
+      // Decode URL first
+      const decodedUrl = decodeURIComponent(url).toLowerCase();
+      
+      // Redfin URL patterns: /CA/Los-Angeles/123-Main-St-Los-Angeles-CA-90210/
+      const redfinPattern = /\/[a-z]{2}\/[^\/]+\/(\d+[^\/]*)/i;
+      const redfinMatch = decodedUrl.match(redfinPattern);
+      if (redfinMatch && redfinMatch[1]) {
+        const addressPart = redfinMatch[1]
+          .replace(/[-_]/g, ' ')
+          .replace(/\s*\b[a-z]{2}\s*\d{5}.*$/i, '') // Remove state and zip
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (addressPart.length > 3) return addressPart;
+      }
+      
+      // Zillow URL patterns: /homedetails/123-Main-St-Los-Angeles-CA-90210/
+      const zillowPattern = /homedetails\/([^\/]+)/i;
+      const zillowMatch = decodedUrl.match(zillowPattern);
+      if (zillowMatch && zillowMatch[1]) {
+        const addressPart = zillowMatch[1]
+          .replace(/[-_]/g, ' ')
+          .replace(/\s*\b[a-z]{2}\s*\d{5}.*$/i, '') // Remove state and zip
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (addressPart.length > 3) return addressPart;
+      }
+      
+      // Realtor.com patterns: /property/123-Main-St_Los-Angeles_CA_90210
+      const realtorPattern = /property\/([^\/]+)/i;
+      const realtorMatch = decodedUrl.match(realtorPattern);
+      if (realtorMatch && realtorMatch[1]) {
+        const addressPart = realtorMatch[1]
+          .replace(/[-_]/g, ' ')
+          .replace(/\s*\b[a-z]{2}\s*\d{5}.*$/i, '') // Remove state and zip
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (addressPart.length > 3) return addressPart;
+      }
+      
+      // Generic pattern: look for address-like segments in URL path
+      const urlParts = decodedUrl.split('/');
+      for (const part of urlParts) {
+        if (part && part.length > 5 && /\d/.test(part) && /[a-z]/.test(part)) {
+          const cleaned = part
+            .replace(/[-_]/g, ' ')
+            .replace(/\s*\b[a-z]{2}\s*\d{5}.*$/i, '') // Remove state and zip
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (cleaned.length > 3 && /^\d/.test(cleaned)) {
+            return cleaned;
+          }
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('🏠 Error extracting address from URL:', error);
+      return null;
+    }
+  }
+  
+  static sanitizeFilename(filename) {
+    if (!filename) return 'Property';
+    
+    return filename
+      .replace(/[<>:"/\\|?*]/g, '') // Remove invalid filename characters
+      .replace(/\s+/g, '_')         // Replace spaces with underscores
+      .replace(/_{2,}/g, '_')       // Replace multiple underscores with single
+      .replace(/^_|_$/g, '')        // Remove leading/trailing underscores
+      .substring(0, 50);            // Limit length
   }
 }
 
