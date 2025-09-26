@@ -1057,10 +1057,203 @@ class PropertyDataExtractor {
       }
     }
     
-    const result = { price, annualTax, annualInsurance, monthlyRent };
+    // Detect red flags in the property listing
+    const redFlags = this.detectRedFlags();
+    
+    const result = { price, annualTax, annualInsurance, monthlyRent, redFlags };
     console.log('🏠 Final extraction result:', result);
     
     return result;
+  }
+  
+  // Red flag detection method
+  detectRedFlags() {
+    console.log('🏠 Scanning for red flags...');
+    
+    const redFlags = [];
+    const allText = document.body.innerText || document.body.textContent || '';
+    const lowerText = allText.toLowerCase();
+    
+    // Define red flag patterns
+    const redFlagPatterns = [
+      {
+        pattern: /septic|sewage system|on-site waste|septic tank/i,
+        flag: 'SEPTIC_SYSTEM',
+        message: 'Property may have septic system - inspect condition, pumping costs ($300-600), and replacement potential ($3,000-7,000)',
+        severity: 'high'
+      },
+      {
+        pattern: /well water|private well|water well/i,
+        flag: 'WELL_WATER',
+        message: 'Property uses well water - test water quality and inspect well system',
+        severity: 'medium'
+      },
+      {
+        pattern: /asbestos|lead\s+paint|lead-based paint/i,
+        flag: 'HAZARDOUS_MATERIALS',
+        message: 'Property may contain hazardous materials - professional inspection recommended',
+        severity: 'high'
+      },
+      {
+        pattern: /structural\s+issues|foundation\s+problems|structural\s+damage|foundation\s+repair/i,
+        flag: 'STRUCTURAL_ISSUES',
+        message: 'Potential structural issues mentioned - detailed inspection required',
+        severity: 'high'
+      },
+      {
+        pattern: /as-is|sold\s+as\s+is|cash\s+only|no\s+financing/i,
+        flag: 'AS_IS_SALE',
+        message: 'Property sold as-is - may indicate issues, inspect thoroughly before purchase',
+        severity: 'medium'
+      },
+      {
+        pattern: /short\s+sale|foreclosure|bank\s+owned|reo\s+property/i,
+        flag: 'DISTRESSED_SALE',
+        message: 'Distressed property - may have title issues, damage, or delayed closing',
+        severity: 'medium'
+      },
+      {
+        pattern: /oil\s+tank|heating\s+oil|underground\s+tank/i,
+        flag: 'OIL_TANK',
+        message: 'Property may have oil tank - check for leaks and environmental issues',
+        severity: 'medium'
+      },
+      {
+        pattern: /mobile\s+home|manufactured\s+home|trailer/i,
+        flag: 'MOBILE_HOME',
+        message: 'Mobile/manufactured home - different financing and insurance requirements',
+        severity: 'medium'
+      },
+      {
+        pattern: /estate\s+sale|probate|deceased/i,
+        flag: 'ESTATE_SALE',
+        message: 'Estate sale - may have title complications or extended closing timeline',
+        severity: 'low'
+      }
+    ];
+    
+    // Check for each red flag pattern
+    redFlagPatterns.forEach(({ pattern, flag, message, severity }) => {
+      if (pattern.test(allText)) {
+        redFlags.push({
+          type: flag,
+          message: message,
+          severity: severity
+        });
+        console.log(`🏠 🚩 Red flag detected: ${flag}`);
+      }
+    });
+    
+    // Special check for flood zone with rating > 1/10
+    this.checkFloodZone(allText, redFlags);
+    
+    // Special check for HOA with non-zero fees
+    this.checkHOAFees(allText, redFlags);
+    
+    return redFlags;
+  }
+  
+  // Check for flood zone with rating greater than 1/10
+  checkFloodZone(allText, redFlags) {
+    const floodZonePatterns = [
+      /flood\s+zone\s+rating?\s*:?\s*([0-9]+)\s*\/\s*10/i,
+      /flood\s+risk\s+rating?\s*:?\s*([0-9]+)\s*\/\s*10/i,
+      /flood\s+score\s*:?\s*([0-9]+)\s*\/\s*10/i,
+      /flood\s+rating?\s*:?\s*([0-9]+)\s*\/\s*10/i,
+      /flood\s+risk\s*:?\s*([0-9]+)\s*\/\s*10/i
+    ];
+    
+    for (const pattern of floodZonePatterns) {
+      const match = allText.match(pattern);
+      if (match) {
+        const rating = parseInt(match[1], 10);
+        
+        console.log(`🏠 Flood zone rating found: ${rating}/10`);
+        
+        if (rating > 1) {
+          redFlags.push({
+            type: 'FLOOD_ZONE',
+            message: `Property has flood zone rating: ${rating}/10 - verify flood insurance requirements and costs`,
+            severity: 'high'
+          });
+          console.log(`🏠 🚩 Red flag detected: FLOOD_ZONE (${rating}/10)`);
+        } else {
+          console.log(`🏠 ✓ Flood zone rating ${rating}/10 is low - no red flag`);
+        }
+        break; // Only check once even if multiple patterns match
+      }
+    }
+    
+    // Also check for general flood zone mentions without specific ratings
+    const generalFloodPatterns = [
+      /flood\s+zone\s+[A-Z]\b/i,  // Flood Zone A, B, etc.
+      /FEMA\s+flood\s+zone/i,
+      /special\s+flood\s+hazard\s+area/i,
+      /100-year\s+flood\s+plain/i,
+      /500-year\s+flood\s+plain/i
+    ];
+    
+    for (const pattern of generalFloodPatterns) {
+      if (pattern.test(allText)) {
+        redFlags.push({
+          type: 'FLOOD_ZONE',
+          message: 'Property may be in designated flood zone - verify flood insurance requirements and costs',
+          severity: 'high'
+        });
+        console.log(`🏠 🚩 Red flag detected: FLOOD_ZONE (general)`);
+        break; // Only add once
+      }
+    }
+  }
+  
+  // Check for HOA with actual fees (not $0 or N/A)
+  checkHOAFees(allText, redFlags) {
+    const hoaPatterns = [
+      /HOA\s+dues?\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /homeowners?\s+association\s+dues?\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /association\s+fee\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /HOA\s+fee\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /community\s+fee\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /condo\s+fee\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /monthly\s+HOA\s*[\s\n\r]*\$\s*([0-9,]+)/i
+    ];
+    
+    // Check if HOA is mentioned as N/A, None, or $0 (these indicate no HOA)
+    const noHOAPatterns = [
+      /HOA\s+dues?\s*[\s\n\r]*(?:N\/A|None|--|\$\s*0)/i,
+      /homeowners?\s+association\s+dues?\s*[\s\n\r]*(?:N\/A|None|--|\$\s*0)/i,
+      /association\s+fee\s*[\s\n\r]*(?:N\/A|None|--|\$\s*0)/i,
+      /HOA\s+fee\s*[\s\n\r]*(?:N\/A|None|--|\$\s*0)/i
+    ];
+    
+    // First check if HOA is explicitly marked as N/A or $0 (no flag needed)
+    for (const pattern of noHOAPatterns) {
+      if (pattern.test(allText)) {
+        console.log(`🏠 ✓ HOA marked as N/A, None, or $0 - no red flag`);
+        return; // Exit early - no HOA fees
+      }
+    }
+    
+    // Then check for actual dollar amounts
+    for (const pattern of hoaPatterns) {
+      const match = allText.match(pattern);
+      if (match) {
+        const amountStr = match[1].replace(/,/g, '');
+        const amount = parseInt(amountStr, 10);
+        
+        console.log(`🏠 HOA fee found: $${amount}`);
+        
+        if (amount > 0) {
+          redFlags.push({
+            type: 'HOA_FEES',
+            message: `Property has HOA fees: $${amount}/month - ongoing costs, renovation restrictions, potential rental limitations, and special assessments`,
+            severity: 'high'
+          });
+          console.log(`🏠 🚩 Red flag detected: HOA_FEES ($${amount})`);
+          break; // Only add once even if multiple patterns match
+        }
+      }
+    }
   }
 }
 

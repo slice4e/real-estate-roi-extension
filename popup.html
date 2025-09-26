@@ -168,6 +168,26 @@
     .calculate-btn:hover {
       background: #45a049;
     }
+    .export-btn {
+      width: 100%;
+      padding: 8px;
+      background: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      display: none; /* Hidden by default, shown when results are available */
+    }
+    .export-btn:hover {
+      background: #1976D2;
+    }
+    .export-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
     .recalculate-btn {
       padding: 6px 8px;
       background: #2196F3;
@@ -320,7 +340,7 @@
       <div class="input-group">
         <div class="input-field">
           <label>Expected Monthly Rent</label>
-          <input type="number" id="rent" value="1800">
+          <input type="number" id="rent" placeholder="Monthly rent">
         </div>
         <div class="input-field">
           <label>Remodel Budget</label>
@@ -370,11 +390,11 @@
         </div>
         <div class="input-field">
           <label>Monthly Insurance</label>
-          <input type="number" id="insurance" value="120">
+          <input type="number" id="insurance" placeholder="Monthly insurance">
         </div>
         <div class="input-field">
           <label>Monthly Property Taxes</label>
-          <input type="number" id="propertyTaxes" value="150">
+          <input type="number" id="propertyTaxes" placeholder="Monthly taxes">
         </div>
         <div class="input-field">
           <label>Monthly Other/Misc</label>
@@ -414,6 +434,7 @@
     </div>
 
     <button class="calculate-btn" id="calculate-btn">Calculate ROI</button>
+    <button class="export-btn" id="export-btn">Export to Excel</button>
   </div>
   
   <!-- Settings Tab Content (moved outside input-form) -->
@@ -480,6 +501,7 @@
   
   <div id="output" class="loading">Loading property data...</div>
   
+  <script src="xlsx.full.min.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
