@@ -81,7 +81,8 @@ const FIELD_IDS = {
   refinanceRate: 'refinanceRate',
   arv: 'arv',
   targetPurchasePriceConventional: 'targetPurchasePriceConventional',
-  targetPurchasePriceHeloc: 'targetPurchasePriceHeloc'
+  targetPurchasePriceHeloc: 'targetPurchasePriceHeloc',
+  calculatedTargetPrice: 'calculatedTargetPrice'
 };
 
 // =====================================================
@@ -925,6 +926,7 @@ class UIManager {
     output.innerHTML = ResultsFormatter.format(calculation, appState.currentStrategy === CONFIG.strategies.heloc);
     this.showExportButton();
     this.updateTargetPriceField(calculation);
+    this.updateCalculatedTargetPriceDisplay();
   }
   
   static showExportButton() {
@@ -948,6 +950,44 @@ class UIManager {
     
     if (appState.currentStrategy === CONFIG.strategies.heloc) {
       appState.updateARV(newValue, true);
+    }
+  }
+  
+  static updateCalculatedTargetPriceDisplay() {
+    // Always calculate and display the target price for 10% ROI
+    try {
+      const params = new FormParameters(appState.currentStrategy).getAll();
+      
+      // Force target price calculation by temporarily clearing the purchase price
+      const tempParams = {...params, targetPurchasePrice: null};
+      
+      let targetPrice;
+      if (appState.currentStrategy === CONFIG.strategies.conventional) {
+        targetPrice = TargetPriceCalculator.calculateConventional(
+          appState.currentData?.price || params.askingPrice || 0,
+          appState.currentData?.annualTax || params.annualTax || 0,
+          tempParams
+        );
+      } else {
+        targetPrice = TargetPriceCalculator.calculateHeloc(
+          appState.currentData?.price || params.askingPrice || 0,
+          appState.currentData?.annualTax || params.annualTax || 0,
+          tempParams
+        );
+      }
+      
+      const calculatedField = Utils.getElement(FIELD_IDS.calculatedTargetPrice);
+      if (calculatedField && targetPrice > 0) {
+        calculatedField.value = `$${Math.round(targetPrice).toLocaleString()}`;
+      } else if (calculatedField) {
+        calculatedField.value = 'Enter rent and costs above';
+      }
+    } catch (error) {
+      console.error('🏠 Error calculating target price:', error);
+      const calculatedField = Utils.getElement(FIELD_IDS.calculatedTargetPrice);
+      if (calculatedField) {
+        calculatedField.value = 'Enter required fields';
+      }
     }
   }
   
@@ -1023,7 +1063,6 @@ class EventHandlers {
     this.initializeTabSwitching();
     this.initializeAdvancedToggle();
     this.initializeTargetPriceHandling();
-    this.initializeCalculateButton();
     this.initializeExportButton();
     this.initializeFormInputs();
     this.initializeSpecialFields();
@@ -1167,24 +1206,6 @@ class EventHandlers {
           Utils.markAsAutoCalculated(this);
         }
       });
-    });
-  }
-  
-  static initializeCalculateButton() {
-    Utils.getElement('calculate-btn').addEventListener('click', () => {
-      // Check if target price fields are auto-calculated and clear them if so
-      // This allows recalculation when purchase price is overwritten
-      const targetPriceFieldId = appState.currentStrategy === CONFIG.strategies.conventional 
-        ? FIELD_IDS.targetPurchasePriceConventional 
-        : FIELD_IDS.targetPurchasePriceHeloc;
-      
-      const targetPriceField = Utils.getElement(targetPriceFieldId);
-      if (targetPriceField && targetPriceField.placeholder === "Auto-calculated") {
-        targetPriceField.value = '';
-        Utils.markAsAutoCalculated(targetPriceField);
-      }
-      
-      UIManager.updateResults();
     });
   }
   
@@ -2288,4 +2309,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   
   EventHandlers.initializeAll();
+  
+  // Initialize calculated target price display
+  UIManager.updateCalculatedTargetPriceDisplay();
 });

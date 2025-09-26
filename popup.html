@@ -5,7 +5,7 @@
     body { 
       font-family: 'Segoe UI', sans-serif; 
       padding: 15px; 
-      width: 450px;
+      width: 500px;
       margin: 0;
       font-size: 13px;
     }
@@ -144,7 +144,7 @@
     }
     
     /* Responsive design for side-by-side layout */
-    @media (max-width: 600px) {
+    @media (max-width: 550px) {
       .results > div[style*="display: flex"] {
         flex-direction: column !important;
       }
@@ -336,13 +336,21 @@
         </div>
       </div>
       
-      <!-- Target Purchase Price -->
+      <!-- Purchase Price Section with Side-by-Side Layout -->
       <div class="input-group">
-        <div class="input-field" style="display: flex; align-items: flex-end; gap: 5px;">
+        <div style="display: flex; gap: 10px; align-items: flex-end;">
           <div style="flex: 1;">
-            <label>Target Purchase Price <small>(enter manually or auto-calculate for 10% ROI)</small></label>
-            <input type="number" id="targetPurchasePriceConventional" value="" placeholder="Auto-calculated" style="background: #f9f9f9;">
-            <input type="number" id="targetPurchasePriceHeloc" value="" placeholder="Auto-calculated" style="background: #f9f9f9;" class="hidden">
+            <div class="input-field">
+              <label>Your Purchase Price <small>(enter your actual offer)</small></label>
+              <input type="number" id="targetPurchasePriceConventional" value="" placeholder="Enter your purchase price">
+              <input type="number" id="targetPurchasePriceHeloc" value="" placeholder="Enter your purchase price" class="hidden">
+            </div>
+          </div>
+          <div style="flex: 1;">
+            <div class="input-field">
+              <label>Target for 10% ROI <small>(auto-calculated)</small></label>
+              <input type="text" id="calculatedTargetPrice" value="" placeholder="Will calculate automatically" readonly style="color: #555; font-weight: bold;">
+            </div>
           </div>
         </div>
       </div>
@@ -414,7 +422,6 @@
       </div>
     </div>
 
-    <button class="calculate-btn" id="calculate-btn">Calculate / Recalculate ROI</button>
     <button class="export-btn" id="export-btn">Export to Excel</button>
   </div>
   
