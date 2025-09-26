@@ -254,62 +254,66 @@ class FormDefaults {
     if (!currentRent) Utils.setElementValue(FIELD_IDS.rent, defaults.rent);
     if (!currentImprovements) Utils.setElementValue(FIELD_IDS.improvements, defaults.improvements);
     if (!currentRenovationPeriod) Utils.setElementValue(FIELD_IDS.renovationPeriod, defaults.renovationPeriod);
-    if (!currentPropertyTaxes) Utils.setElementValue(FIELD_IDS.propertyTaxes, defaults.propertyTaxes);
     
-    // Handle insurance: use extracted, calculated, or default
+    // Handle property taxes: prioritize extracted data
+    if (!currentPropertyTaxes) {
+      if (appState.currentData && appState.currentData.annualTax) {
+        const monthlyTax = Math.round(appState.currentData.annualTax / 12);
+        Utils.setElementValue(FIELD_IDS.propertyTaxes, monthlyTax);
+        Utils.logCalculation('Using extracted property taxes', { 
+          annual: appState.currentData.annualTax, 
+          monthly: monthlyTax
+        });
+      } else {
+        Utils.setElementValue(FIELD_IDS.propertyTaxes, defaults.propertyTaxes);
+        Utils.logCalculation('Using default property taxes', { 
+          defaultValue: defaults.propertyTaxes,
+          reason: !appState.currentData ? 'No current data' : 'No annual tax in data'
+        });
+      }
+    } else {
+      Utils.logCalculation('Keeping existing property tax value', { 
+        existingValue: currentPropertyTaxes,
+        reason: 'User has manually set a value'
+      });
+    }
+    
+    // Handle insurance: prioritize extracted data, then calculated, then default
     if (!currentInsurance) {
-      let insuranceValue = defaults.insurance;
-      
-      // If we have property data, try to use calculated insurance
       if (appState.currentData && appState.currentData.price && appState.currentData.annualInsurance) {
-        insuranceValue = Math.round(appState.currentData.annualInsurance / 12);
-        Utils.logCalculation('Using insurance from property data', { 
+        const monthlyInsurance = Math.round(appState.currentData.annualInsurance / 12);
+        Utils.setElementValue(FIELD_IDS.insurance, monthlyInsurance);
+        Utils.logCalculation('Using extracted insurance from property data', { 
           annual: appState.currentData.annualInsurance, 
-          monthly: insuranceValue 
+          monthly: monthlyInsurance 
         });
       } else if (appState.currentData && appState.currentData.price) {
         // Calculate insurance based on property price and rate
         const insuranceRate = CONFIG.defaults.insuranceRate || SettingsManager.DEFAULT_SETTINGS.insuranceRate;
         const annualInsurance = Math.round(appState.currentData.price * insuranceRate / 100);
-        insuranceValue = Math.round(annualInsurance / 12);
+        const monthlyInsurance = Math.round(annualInsurance / 12);
+        Utils.setElementValue(FIELD_IDS.insurance, monthlyInsurance);
         Utils.logCalculation('Using calculated insurance based on rate', { 
           propertyPrice: appState.currentData.price,
           insuranceRate: insuranceRate,
-          monthlyInsurance: insuranceValue 
+          monthlyInsurance: monthlyInsurance 
+        });
+      } else {
+        Utils.setElementValue(FIELD_IDS.insurance, defaults.insurance);
+        Utils.logCalculation('Using default insurance', { 
+          defaultValue: defaults.insurance 
         });
       }
-      
-      Utils.setElementValue(FIELD_IDS.insurance, insuranceValue);
+    } else {
+      Utils.logCalculation('Keeping existing insurance value', { 
+        existingValue: currentInsurance 
+      });
     }
     
     // Set strategy-specific defaults
     Object.entries(defaults).forEach(([key, value]) => {
       if (['rent', 'improvements', 'renovationPeriod', 'propertyTaxes', 'insurance'].includes(key)) {
-        // Handle extracted data for taxes and insurance if current values are defaults or empty
-        if (key === 'insurance' && appState.currentData && appState.currentData.annualInsurance) {
-          const currentValue = Utils.getFloatValue(FIELD_IDS[key]);
-          const isDefaultValue = currentValue === defaults.insurance || currentValue === 0;
-          if (isDefaultValue) {
-            const monthlyInsurance = Math.round(appState.currentData.annualInsurance / 12);
-            Utils.setElementValue(FIELD_IDS[key], monthlyInsurance);
-            Utils.logCalculation('Using extracted insurance', { 
-              annual: appState.currentData.annualInsurance, 
-              monthly: monthlyInsurance 
-            });
-          }
-        }
-        else if (key === 'propertyTaxes' && appState.currentData && appState.currentData.annualTax) {
-          const currentValue = Utils.getFloatValue(FIELD_IDS[key]);
-          const isDefaultValue = currentValue === defaults.propertyTaxes || currentValue === 0;
-          if (isDefaultValue) {
-            const monthlyTax = Math.round(appState.currentData.annualTax / 12);
-            Utils.setElementValue(FIELD_IDS[key], monthlyTax);
-            Utils.logCalculation('Using extracted property taxes', { 
-              annual: appState.currentData.annualTax, 
-              monthly: monthlyTax 
-            });
-          }
-        }
+        // Property taxes and insurance are handled earlier in the method
         return;
       }
       
@@ -1316,6 +1320,29 @@ class EventHandlers {
     (errorMessages[attempt] || errorMessages.default)();
   }
   
+  static clearPropertySpecificFields() {
+    // Clear fields that are specific to individual properties
+    // These should not persist when moving between different properties
+    const propertySpecificFields = [
+      FIELD_IDS.rent,
+      FIELD_IDS.propertyTaxes,
+      FIELD_IDS.insurance,
+      FIELD_IDS.askingPrice,
+      FIELD_IDS.annualTax,
+      FIELD_IDS.targetPurchasePriceConventional,
+      FIELD_IDS.targetPurchasePriceHeloc,
+      FIELD_IDS.arv
+    ];
+    
+    propertySpecificFields.forEach(fieldId => {
+      Utils.setElementValue(fieldId, '');
+    });
+    
+    Utils.logCalculation('Cleared property-specific fields for new property', {
+      clearedFields: propertySpecificFields
+    });
+  }
+
   static handleDataReceived(data) {
     Utils.logCalculation('Property data received', data);
     
@@ -1325,22 +1352,23 @@ class EventHandlers {
       UIManager.showError(validationResult.errorMessage);
       return;
     }
-    
+
     // Handle missing data
     this.normalizePropertyData(data);
     
+    // Clear property-specific fields to avoid carrying over values from previous properties
+    this.clearPropertySpecificFields();
+
     // Set up the application state
     appState.setData(data);
     UIManager.showPropertyInfo(data);
     Utils.getElement("input-form").style.display = "block";
-    
+
     // Set initial form defaults and calculate results
     FormDefaults.populate(appState.currentStrategy);
     this.populateRentFromZestimate(data);
     UIManager.updateResults();
-  }
-  
-  static validatePropertyData(data) {
+  }  static validatePropertyData(data) {
     if (!data || (!data.price && !data.annualTax)) {
       return {
         isValid: false,
