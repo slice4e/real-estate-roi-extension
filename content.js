@@ -1057,10 +1057,100 @@ class PropertyDataExtractor {
       }
     }
     
-    const result = { price, annualTax, annualInsurance, monthlyRent };
+    // Detect red flags in the property listing
+    const redFlags = this.detectRedFlags();
+    
+    const result = { price, annualTax, annualInsurance, monthlyRent, redFlags };
     console.log('🏠 Final extraction result:', result);
     
     return result;
+  }
+  
+  // Red flag detection method
+  detectRedFlags() {
+    console.log('🏠 Scanning for red flags...');
+    
+    const redFlags = [];
+    const allText = document.body.innerText || document.body.textContent || '';
+    const lowerText = allText.toLowerCase();
+    
+    // Define red flag patterns
+    const redFlagPatterns = [
+      {
+        pattern: /septic|sewage system|on-site waste|septic tank/i,
+        flag: 'SEPTIC_SYSTEM',
+        message: 'Property may have septic system - inspect condition, pumping costs ($300-600), and replacement potential ($3,000-7,000)',
+        severity: 'high'
+      },
+      {
+        pattern: /well water|private well|water well/i,
+        flag: 'WELL_WATER',
+        message: 'Property uses well water - test water quality and inspect well system',
+        severity: 'medium'
+      },
+      {
+        pattern: /flood\s+zone|flood\s+plain|flood\s+area|fema\s+flood/i,
+        flag: 'FLOOD_ZONE',
+        message: 'Property may be in flood zone - verify flood insurance requirements',
+        severity: 'high'
+      },
+      {
+        pattern: /asbestos|lead\s+paint|lead-based paint/i,
+        flag: 'HAZARDOUS_MATERIALS',
+        message: 'Property may contain hazardous materials - professional inspection recommended',
+        severity: 'high'
+      },
+      {
+        pattern: /structural\s+issues|foundation\s+problems|structural\s+damage|foundation\s+repair/i,
+        flag: 'STRUCTURAL_ISSUES',
+        message: 'Potential structural issues mentioned - detailed inspection required',
+        severity: 'high'
+      },
+      {
+        pattern: /as-is|sold\s+as\s+is|cash\s+only|no\s+financing/i,
+        flag: 'AS_IS_SALE',
+        message: 'Property sold as-is - likely indicates significant issues, inspect thoroughly',
+        severity: 'high'
+      },
+      {
+        pattern: /short\s+sale|foreclosure|bank\s+owned|reo\s+property/i,
+        flag: 'DISTRESSED_SALE',
+        message: 'Distressed property - may have title issues, damage, or delayed closing',
+        severity: 'medium'
+      },
+      {
+        pattern: /oil\s+tank|heating\s+oil|underground\s+tank/i,
+        flag: 'OIL_TANK',
+        message: 'Property may have oil tank - check for leaks and environmental issues',
+        severity: 'medium'
+      },
+      {
+        pattern: /mobile\s+home|manufactured\s+home|trailer/i,
+        flag: 'MOBILE_HOME',
+        message: 'Mobile/manufactured home - different financing and insurance requirements',
+        severity: 'medium'
+      },
+      {
+        pattern: /estate\s+sale|probate|deceased/i,
+        flag: 'ESTATE_SALE',
+        message: 'Estate sale - may have title complications or extended closing timeline',
+        severity: 'low'
+      }
+    ];
+    
+    // Check for each red flag pattern
+    redFlagPatterns.forEach(({ pattern, flag, message, severity }) => {
+      if (pattern.test(allText)) {
+        redFlags.push({
+          type: flag,
+          message: message,
+          severity: severity
+        });
+        console.log(`🏠 🚩 Red flag detected: ${flag}`);
+      }
+    });
+    
+    return redFlags;
   }
 }
 
