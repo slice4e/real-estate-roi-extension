@@ -1025,7 +1025,6 @@ class EventHandlers {
     this.initializeTargetPriceHandling();
     this.initializeCalculateButton();
     this.initializeExportButton();
-    this.initializeRecalculateButton();
     this.initializeFormInputs();
     this.initializeSpecialFields();
     this.initializeDataExtraction();
@@ -1173,6 +1172,18 @@ class EventHandlers {
   
   static initializeCalculateButton() {
     Utils.getElement('calculate-btn').addEventListener('click', () => {
+      // Check if target price fields are auto-calculated and clear them if so
+      // This allows recalculation when purchase price is overwritten
+      const targetPriceFieldId = appState.currentStrategy === CONFIG.strategies.conventional 
+        ? FIELD_IDS.targetPurchasePriceConventional 
+        : FIELD_IDS.targetPurchasePriceHeloc;
+      
+      const targetPriceField = Utils.getElement(targetPriceFieldId);
+      if (targetPriceField && targetPriceField.placeholder === "Auto-calculated") {
+        targetPriceField.value = '';
+        Utils.markAsAutoCalculated(targetPriceField);
+      }
+      
       UIManager.updateResults();
     });
   }
@@ -1198,28 +1209,6 @@ class EventHandlers {
         }
       } else {
         alert('No calculation data available. Please calculate ROI first.');
-      }
-    });
-  }
-  
-  static initializeRecalculateButton() {
-    Utils.getElement('recalculate-target-price').addEventListener('click', () => {
-      const targetPriceFieldId = appState.currentStrategy === CONFIG.strategies.conventional 
-        ? FIELD_IDS.targetPurchasePriceConventional 
-        : FIELD_IDS.targetPurchasePriceHeloc;
-      
-      const targetPriceField = Utils.getElement(targetPriceFieldId);
-      if (targetPriceField) {
-        targetPriceField.value = '';
-        Utils.markAsAutoCalculated(targetPriceField);
-        
-        Utils.logCalculation('User requested target price recalculation', {
-          strategy: appState.currentStrategy
-        });
-        
-        if (appState.currentData) {
-          UIManager.updateResults();
-        }
       }
     });
   }
