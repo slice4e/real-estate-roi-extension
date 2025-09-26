@@ -56,7 +56,7 @@ const CONFIG = {
     danger: '#d32f2f'
   },
   searchRanges: {
-    conventional: { lowMultiplier: 0.5, highMultiplier: 1.2 },
+    conventional: { lowMultiplier: 0.3, highMultiplier: 1.2 },
     heloc: { lowMultiplier: 0.3, highMultiplier: 1.0 }
   }
 };
@@ -958,29 +958,50 @@ class UIManager {
     try {
       const params = new FormParameters(appState.currentStrategy).getAll();
       
+      // Check if we have minimum required fields
+      if (!params.rent || params.rent <= 0) {
+        const calculatedField = Utils.getElement(FIELD_IDS.calculatedTargetPrice);
+        if (calculatedField) calculatedField.value = 'Enter monthly rent';
+        return;
+      }
+      
+      console.log('🏠 Target price calculation:', {
+        strategy: appState.currentStrategy,
+        rent: params.rent,
+        improvements: params.improvements,
+        renovationPeriod: params.renovationPeriod,
+        askingPrice: params.askingPrice,
+        currentDataPrice: appState.currentData?.price,
+        annualTax: params.annualTax,
+        currentDataTax: appState.currentData?.annualTax
+      });
+      
       // Force target price calculation by temporarily clearing the purchase price
       const tempParams = {...params, targetPurchasePrice: null};
       
+      // Use a reasonable default asking price if none is available
+      const askingPrice = appState.currentData?.price || params.askingPrice || 200000;
+      const annualTax = appState.currentData?.annualTax || params.annualTax || (askingPrice * 0.015);
+      
       let targetPrice;
       if (appState.currentStrategy === CONFIG.strategies.conventional) {
-        targetPrice = TargetPriceCalculator.calculateConventional(
-          appState.currentData?.price || params.askingPrice || 0,
-          appState.currentData?.annualTax || params.annualTax || 0,
-          tempParams
-        );
+        targetPrice = TargetPriceCalculator.calculateConventional(askingPrice, annualTax, tempParams);
       } else {
-        targetPrice = TargetPriceCalculator.calculateHeloc(
-          appState.currentData?.price || params.askingPrice || 0,
-          appState.currentData?.annualTax || params.annualTax || 0,
-          tempParams
-        );
+        targetPrice = TargetPriceCalculator.calculateHeloc(askingPrice, annualTax, tempParams);
       }
+      
+      console.log('🏠 Calculated target price:', targetPrice);
       
       const calculatedField = Utils.getElement(FIELD_IDS.calculatedTargetPrice);
       if (calculatedField && targetPrice > 0) {
-        calculatedField.value = `$${Math.round(targetPrice).toLocaleString()}`;
+        const discountPercent = ((askingPrice - targetPrice) / askingPrice) * 100;
+        if (discountPercent > 70) {
+          calculatedField.value = `$${Math.round(targetPrice).toLocaleString()} (${discountPercent.toFixed(0)}% discount)`;
+        } else {
+          calculatedField.value = `$${Math.round(targetPrice).toLocaleString()}`;
+        }
       } else if (calculatedField) {
-        calculatedField.value = 'Enter rent and costs above';
+        calculatedField.value = 'Too high discount needed (>70%)';
       }
     } catch (error) {
       console.error('🏠 Error calculating target price:', error);
@@ -1096,7 +1117,6 @@ class EventHandlers {
     // Hide main interface, show settings
     elements.inputForm.style.display = 'none';
     elements.outputDiv.style.display = 'none';
-    elements.calculateBtn.style.display = 'none';
     elements.settingsContent.style.display = 'block';
     UIManager.hideExportButton();
     
@@ -1121,7 +1141,6 @@ class EventHandlers {
     elements.settingsContent.style.display = 'none';
     elements.inputForm.style.display = 'block';
     elements.outputDiv.style.display = 'block';
-    elements.calculateBtn.style.display = 'block';
     
     // Handle strategy change
     const oldStrategy = appState.currentStrategy;
@@ -1131,6 +1150,9 @@ class EventHandlers {
     this.updateStrategyUI();
     FormDefaults.populate(appState.currentStrategy);
     
+    // Always update target price calculation when switching strategies
+    UIManager.updateCalculatedTargetPriceDisplay();
+    
     if (appState.currentData) UIManager.updateResults();
   }
   
@@ -1138,7 +1160,6 @@ class EventHandlers {
     return {
       inputForm: document.getElementById('input-form'),
       settingsContent: document.getElementById('settings-content'),
-      calculateBtn: document.getElementById('calculate-btn'),
       outputDiv: document.getElementById('output')
     };
   }
@@ -1240,6 +1261,9 @@ class EventHandlers {
       Utils.getElement(fieldId).addEventListener('input', () => {
         this.handleSpecialInputLogic(fieldId);
         this.clearAutoCalculatedTargetPrice();
+        
+        // Always update target price calculation
+        UIManager.updateCalculatedTargetPriceDisplay();
         
         if (appState.currentData) {
           UIManager.updateResults();
