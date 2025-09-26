@@ -198,8 +198,14 @@ class MortgageCalculator {
            (Math.pow(1 + monthlyRate, numPayments) - 1);
   }
   
-  static calculateHoldingCosts(monthlyPayment, months) {
-    return monthlyPayment * months;
+  static calculateHoldingCosts(monthlyPayment, months, propertyTaxes, insurance, otherMisc) {
+    // Total monthly holding costs include:
+    // - Mortgage/loan payment (principal & interest)
+    // - Property taxes
+    // - Insurance 
+    // - Other expenses (utilities, HOA, maintenance, etc.)
+    const totalMonthlyHoldingCosts = monthlyPayment + propertyTaxes + insurance + otherMisc;
+    return totalMonthlyHoldingCosts * months;
   }
 }
 
@@ -542,7 +548,13 @@ class ConventionalROICalculator {
     );
     
     // Calculate holding costs during renovation
-    const holdingCosts = MortgageCalculator.calculateHoldingCosts(mortgagePayment, params.renovationPeriod);
+    const holdingCosts = MortgageCalculator.calculateHoldingCosts(
+      mortgagePayment, 
+      params.renovationPeriod, 
+      params.propertyTaxes, 
+      params.insurance, 
+      params.otherMisc
+    );
     
     // Total cash invested
     const totalCashIn = downPayment + params.closingCosts + params.improvements + holdingCosts;
@@ -572,6 +584,7 @@ class ConventionalROICalculator {
       roi,
       paybackPeriod,
       holdingCosts,
+      renovationPeriod: params.renovationPeriod,
       isTargetPrice,
       details: {
         rent: params.rent,
@@ -606,7 +619,13 @@ class HelocROICalculator {
       params.helocRate,
       params.helocTerm
     );
-    const holdingCosts = MortgageCalculator.calculateHoldingCosts(helocMonthlyPayment, totalHoldingPeriod);
+    const holdingCosts = MortgageCalculator.calculateHoldingCosts(
+      helocMonthlyPayment, 
+      totalHoldingPeriod, 
+      params.propertyTaxes, 
+      params.insurance, 
+      params.otherMisc
+    );
     const totalCashIn = initialCashIn + holdingCosts;
     
     // Refinance calculations - with time-based constraint
@@ -710,7 +729,7 @@ class ResultsFormatter {
     return `<div class="details">
       <strong>Purchase:</strong> ${Utils.formatCurrency(calculation.purchasePrice)}${discountInfo}
       <br><strong>Total Cash In:</strong> ${Utils.formatCurrency(calculation.totalCashIn)}${helocInfo}
-      <br><strong>Holding Costs:</strong> ${Utils.formatCurrency(calculation.holdingCosts)}
+      <br><strong>Total Holding Costs:</strong> ${Utils.formatCurrency(calculation.holdingCosts)} <small>(mortgage + taxes + insurance + other)</small>
       <br><strong>Payback Period:</strong> ${calculation.paybackPeriod.toFixed(1)} years
     </div>`;
   }
@@ -744,22 +763,22 @@ class ResultsFormatter {
   }
   
   static formatHelocDetails(calculation) {
-    const totalHoldingPeriod = (calculation.holdingCosts / calculation.helocPayment);
-    const renovationPeriod = Math.round(totalHoldingPeriod - 1);
-    const hasTimeConstraint = renovationPeriod < CONFIG.thresholds.seasoningMonths;
+    // Use the actual holding period from the calculation (renovation + 1 month for refinancing)
+    const totalHoldingPeriod = calculation.renovationPeriod + 1;
+    const hasTimeConstraint = calculation.renovationPeriod < CONFIG.thresholds.seasoningMonths;
     
     return `
       <strong>INITIAL INVESTMENT:</strong><br>
       - Purchase Price: ${Utils.formatCurrency(calculation.purchasePrice)}<br>
       - Closing Costs: $1,000<br>
       - Improvements: ${Utils.formatCurrency(calculation.totalCashIn - calculation.purchasePrice - 1000 - calculation.holdingCosts)}<br>
-      - HELOC Payments (holding period only - ${Math.round(totalHoldingPeriod)} months): ${Utils.formatCurrency(calculation.holdingCosts)}<br>
-      <small style="color: #666;">  * HELOC paid off at refinance completion</small><br>
+      - Total Holding Costs (${totalHoldingPeriod} months): ${Utils.formatCurrency(calculation.holdingCosts)}<br>
+      <small style="color: #666;">  * Includes HELOC payment, taxes, insurance, and other expenses</small><br>
       <strong>= Total Cash In: ${Utils.formatCurrency(calculation.totalCashIn)}</strong><br><br>
       
       <strong>REFINANCE RECOVERY:</strong><br>
       - ARV (After Repair Value): ${Utils.formatCurrency(calculation.arv)}<br>
-      - Renovation Period: ${renovationPeriod} months ${hasTimeConstraint ? '(under 6 months)' : '(6+ months)'}<br>
+      - Renovation Period: ${calculation.renovationPeriod} months ${hasTimeConstraint ? '(under 6 months)' : '(6+ months)'}<br>
       - Standard Refinance Limit: 70% of ARV = ${Utils.formatCurrency(Math.round(calculation.arv * CONFIG.thresholds.refinanceLTV))}<br>
       ${hasTimeConstraint ? `- Time Constraint: Cannot exceed purchase price = ${Utils.formatCurrency(calculation.purchasePrice)}<br>` : ''}
       - Actual Refinance Loan Amount: ${Utils.formatCurrency(Math.round(calculation.refinanceLoanAmount))}<br>
@@ -784,7 +803,8 @@ class ResultsFormatter {
       - Down Payment: ${Utils.formatCurrency(calculation.downPayment)}<br>
       - Closing Costs: $5,000<br>
       - Improvements: ${Utils.formatCurrency(calculation.totalCashIn - calculation.downPayment - 5000 - calculation.holdingCosts)}<br>
-      - Holding Costs (${Math.round(calculation.holdingCosts / calculation.mortgagePayment)} months): ${Utils.formatCurrency(calculation.holdingCosts)}<br>
+      - Total Holding Costs (${calculation.renovationPeriod} months): ${Utils.formatCurrency(calculation.holdingCosts)}<br>
+      <small style="color: #666;">  * Includes mortgage, taxes, insurance, and other expenses</small><br>
       <strong>= Total Cash In: ${Utils.formatCurrency(calculation.totalCashIn)}</strong><br><br>
       
       <strong>LOAN DETAILS:</strong><br>
@@ -945,6 +965,32 @@ class UIManager {
     const propertyInfo = Utils.getElement("property-info");
     propertyInfo.style.display = "block";
     
+    // Generate red flags section if any are found
+    let redFlagsHtml = '';
+    if (data.redFlags && data.redFlags.length > 0) {
+      const flagItems = data.redFlags.map(flag => {
+        const flagColor = flag.severity === 'high' ? '#d32f2f' : 
+                         flag.severity === 'medium' ? '#f57c00' : '#ff9800';
+        const flagIcon = flag.severity === 'high' ? '!!' : 
+                        flag.severity === 'medium' ? '!' : '*';
+        return `<div style="margin: 5px 0; padding: 8px; background: ${flag.severity === 'high' ? '#ffebee' : '#fff8e1'}; border-left: 4px solid ${flagColor}; border-radius: 3px;">
+          <strong style="color: ${flagColor};">[${flagIcon}] ${flag.severity.toUpperCase()} RISK</strong><br>
+          <span style="font-size: 12px; color: #333;">${flag.message}</span>
+        </div>`;
+      }).join('');
+      
+      const highRiskCount = data.redFlags.filter(f => f.severity === 'high').length;
+      const headerColor = highRiskCount > 0 ? '#d32f2f' : '#f57c00';
+      const headerText = highRiskCount > 0 ? '[!!] HIGH RISK ISSUES DETECTED' : '[!] POTENTIAL ISSUES DETECTED';
+      
+      redFlagsHtml = `
+        <div style="margin-bottom: 15px; padding: 10px; background: ${highRiskCount > 0 ? '#ffebee' : '#fff8e1'}; border: 1px solid ${headerColor}; border-radius: 5px;">
+          <div style="font-weight: bold; color: ${headerColor}; margin-bottom: 8px;">${headerText}</div>
+          ${flagItems}
+        </div>
+      `;
+    }
+
     const monthlyTax = data.annualTax ? Math.round(data.annualTax / 12) : Math.round(data.price * CONFIG.thresholds.estimatedTaxRate / 12);
     const taxInfo = data.annualTax ? `$${monthlyTax} (extracted)` : `<span style="color: ${CONFIG.colors.warning};">~$${monthlyTax} (estimated)</span>`;
     
@@ -964,6 +1010,7 @@ class UIManager {
       `<br><strong>Rent Zestimate:</strong> ${Utils.formatCurrency(data.monthlyRent)}/month (extracted)` : '';
     
     propertyInfo.innerHTML = `
+      ${redFlagsHtml}
       <strong>Property:</strong> ${Utils.formatCurrency(data.price)} asking price<br>
       <strong>Monthly Property Taxes:</strong> ${taxInfo}<br>
       <strong>Monthly Insurance:</strong> ${insuranceInfo}${rentInfo}
@@ -1794,7 +1841,7 @@ class ExcelExporter {
       ['Down Payment:', { f: `B4*${mapper.getRef('DownPaymentPercent')}` }], // Row 5
       ['Closing Costs:', { f: mapper.getRef('ClosingCosts') }],       // Row 6
       ['Improvements:', { f: mapper.getRef('Improvements') }],         // Row 7
-      ['Holding Costs:', { f: `PMT(${mapper.getRef('InterestRate')}/12,${mapper.getRef('LoanTerm')}*12,-(B4-B5))*${mapper.getRef('RenovationPeriod')}` }], // Row 8
+      ['Holding Costs:', { f: `(PMT(${mapper.getRef('InterestRate')}/12,${mapper.getRef('LoanTerm')}*12,-(B4-B5))+${mapper.getRef('MonthlyPropertyTaxes')}+${mapper.getRef('MonthlyInsurance')}+${mapper.getRef('OtherMonthlyExpenses')})*${mapper.getRef('RenovationPeriod')}` }], // Row 8
       ['Total Cash Investment:', { f: 'B5+B6+B7+B8' }],               // Row 9
       ['', ''],                                                        // Row 10
       ['LOAN DETAILS', ''],                                            // Row 11
@@ -1856,7 +1903,7 @@ class ExcelExporter {
       ['HELOC Term (Years):', { f: mapper.getRef('HelocTerm') }],     // Row 12
       ['Monthly HELOC Payment:', { f: `IF(OR(${mapper.getRef('HelocRate')}=0,${mapper.getRef('HelocAmount')}=0),0,PMT(${mapper.getRef('HelocRate')}/12,${mapper.getRef('HelocTerm')}*12,-${mapper.getRef('HelocAmount')}))` }], // Row 13
       ['Renovation Period (Months):', { f: mapper.getRef('RenovationPeriod') }], // Row 14
-      ['Total HELOC Holding Costs:', { f: 'B13*B14' }],               // Row 15
+      ['Total HELOC Holding Costs:', { f: `(B13+${mapper.getRef('MonthlyPropertyTaxes')}+${mapper.getRef('MonthlyInsurance')}+${mapper.getRef('OtherMonthlyExpenses')})*B14` }], // Row 15
       ['Total Cash In:', { f: 'B7+B15' }],                            // Row 16
       ['', ''],                                                        // Row 17
       ['REFINANCE RECOVERY', ''],                                      // Row 18
