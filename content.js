@@ -1150,7 +1150,60 @@ class PropertyDataExtractor {
       }
     });
     
+    // Special check for HOA with non-zero fees
+    this.checkHOAFees(allText, redFlags);
+    
     return redFlags;
+  }
+  
+  // Check for HOA with actual fees (not $0 or N/A)
+  checkHOAFees(allText, redFlags) {
+    const hoaPatterns = [
+      /HOA\s+dues?\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /homeowners?\s+association\s+dues?\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /association\s+fee\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /HOA\s+fee\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /community\s+fee\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /condo\s+fee\s*[\s\n\r]*\$\s*([0-9,]+)/i,
+      /monthly\s+HOA\s*[\s\n\r]*\$\s*([0-9,]+)/i
+    ];
+    
+    // Check if HOA is mentioned as N/A, None, or $0 (these indicate no HOA)
+    const noHOAPatterns = [
+      /HOA\s+dues?\s*[\s\n\r]*(?:N\/A|None|--|\$\s*0)/i,
+      /homeowners?\s+association\s+dues?\s*[\s\n\r]*(?:N\/A|None|--|\$\s*0)/i,
+      /association\s+fee\s*[\s\n\r]*(?:N\/A|None|--|\$\s*0)/i,
+      /HOA\s+fee\s*[\s\n\r]*(?:N\/A|None|--|\$\s*0)/i
+    ];
+    
+    // First check if HOA is explicitly marked as N/A or $0 (no flag needed)
+    for (const pattern of noHOAPatterns) {
+      if (pattern.test(allText)) {
+        console.log(`🏠 ✓ HOA marked as N/A, None, or $0 - no red flag`);
+        return; // Exit early - no HOA fees
+      }
+    }
+    
+    // Then check for actual dollar amounts
+    for (const pattern of hoaPatterns) {
+      const match = allText.match(pattern);
+      if (match) {
+        const amountStr = match[1].replace(/,/g, '');
+        const amount = parseInt(amountStr, 10);
+        
+        console.log(`🏠 HOA fee found: $${amount}`);
+        
+        if (amount > 0) {
+          redFlags.push({
+            type: 'HOA_FEES',
+            message: `Property has HOA fees: $${amount}/month - ongoing costs, renovation restrictions, potential rental limitations, and special assessments`,
+            severity: 'high'
+          });
+          console.log(`🏠 🚩 Red flag detected: HOA_FEES ($${amount})`);
+          break; // Only add once even if multiple patterns match
+        }
+      }
+    }
   }
 }
 
