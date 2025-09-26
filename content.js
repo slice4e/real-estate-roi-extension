@@ -1089,12 +1089,6 @@ class PropertyDataExtractor {
         severity: 'medium'
       },
       {
-        pattern: /flood\s+zone|flood\s+plain|flood\s+area|fema\s+flood/i,
-        flag: 'FLOOD_ZONE',
-        message: 'Property may be in flood zone - verify flood insurance requirements',
-        severity: 'high'
-      },
-      {
         pattern: /asbestos|lead\s+paint|lead-based paint/i,
         flag: 'HAZARDOUS_MATERIALS',
         message: 'Property may contain hazardous materials - professional inspection recommended',
@@ -1109,8 +1103,8 @@ class PropertyDataExtractor {
       {
         pattern: /as-is|sold\s+as\s+is|cash\s+only|no\s+financing/i,
         flag: 'AS_IS_SALE',
-        message: 'Property sold as-is - likely indicates significant issues, inspect thoroughly',
-        severity: 'high'
+        message: 'Property sold as-is - may indicate issues, inspect thoroughly before purchase',
+        severity: 'medium'
       },
       {
         pattern: /short\s+sale|foreclosure|bank\s+owned|reo\s+property/i,
@@ -1150,10 +1144,66 @@ class PropertyDataExtractor {
       }
     });
     
+    // Special check for flood zone with rating > 1/10
+    this.checkFloodZone(allText, redFlags);
+    
     // Special check for HOA with non-zero fees
     this.checkHOAFees(allText, redFlags);
     
     return redFlags;
+  }
+  
+  // Check for flood zone with rating greater than 1/10
+  checkFloodZone(allText, redFlags) {
+    const floodZonePatterns = [
+      /flood\s+zone\s+rating?\s*:?\s*([0-9]+)\s*\/\s*10/i,
+      /flood\s+risk\s+rating?\s*:?\s*([0-9]+)\s*\/\s*10/i,
+      /flood\s+score\s*:?\s*([0-9]+)\s*\/\s*10/i,
+      /flood\s+rating?\s*:?\s*([0-9]+)\s*\/\s*10/i,
+      /flood\s+risk\s*:?\s*([0-9]+)\s*\/\s*10/i
+    ];
+    
+    for (const pattern of floodZonePatterns) {
+      const match = allText.match(pattern);
+      if (match) {
+        const rating = parseInt(match[1], 10);
+        
+        console.log(`🏠 Flood zone rating found: ${rating}/10`);
+        
+        if (rating > 1) {
+          redFlags.push({
+            type: 'FLOOD_ZONE',
+            message: `Property has flood zone rating: ${rating}/10 - verify flood insurance requirements and costs`,
+            severity: 'high'
+          });
+          console.log(`🏠 🚩 Red flag detected: FLOOD_ZONE (${rating}/10)`);
+        } else {
+          console.log(`🏠 ✓ Flood zone rating ${rating}/10 is low - no red flag`);
+        }
+        break; // Only check once even if multiple patterns match
+      }
+    }
+    
+    // Also check for general flood zone mentions without specific ratings
+    const generalFloodPatterns = [
+      /flood\s+zone\s+[A-Z]\b/i,  // Flood Zone A, B, etc.
+      /FEMA\s+flood\s+zone/i,
+      /special\s+flood\s+hazard\s+area/i,
+      /100-year\s+flood\s+plain/i,
+      /500-year\s+flood\s+plain/i
+    ];
+    
+    for (const pattern of generalFloodPatterns) {
+      if (pattern.test(allText)) {
+        redFlags.push({
+          type: 'FLOOD_ZONE',
+          message: 'Property may be in designated flood zone - verify flood insurance requirements and costs',
+          severity: 'high'
+        });
+        console.log(`🏠 🚩 Red flag detected: FLOOD_ZONE (general)`);
+        break; // Only add once
+      }
+    }
   }
   
   // Check for HOA with actual fees (not $0 or N/A)
