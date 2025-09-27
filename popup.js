@@ -614,14 +614,15 @@ class HelocROICalculator {
     // Initial cash investment (all cash purchase)
     const initialCashIn = purchasePrice + params.closingCosts + params.improvements;
     
-    // HELOC holding costs during renovation + seasoning + refinancing (1 extra month)
+    // HELOC payment calculation for holding costs during renovation
     const helocMonthlyPayment = MortgageCalculator.calculateMonthlyPayment(
       params.helocAmount,
       params.helocRate,
       params.helocTerm
     );
+    // Holding costs include HELOC payments + property expenses during renovation period
     const holdingCosts = MortgageCalculator.calculateHoldingCosts(
-      helocMonthlyPayment, 
+      helocMonthlyPayment, // HELOC payment is part of holding costs
       totalHoldingPeriod, 
       params.propertyTaxes, 
       params.insurance, 
@@ -727,10 +728,15 @@ class ResultsFormatter {
                                 <br><strong>Final Cash In:</strong> ${Utils.formatCurrency(calculation.finalCashIn)}
                                 <br><strong>ARV:</strong> ${Utils.formatCurrency(calculation.arv)}` : '';
     
+    // Different holding cost descriptions for cash vs conventional
+    const holdingCostDescription = isHeloc 
+      ? "(HELOC payment + taxes + insurance + Monthly Misc.)"
+      : "(mortgage + taxes + insurance + Monthly Misc.)";
+    
     return `<div class="details">
       <strong>Purchase:</strong> ${Utils.formatCurrency(calculation.purchasePrice)}${discountInfo}
       <br><strong>Total Cash In:</strong> ${Utils.formatCurrency(calculation.totalCashIn)}${helocInfo}
-      <br><strong>Total Holding Costs:</strong> ${Utils.formatCurrency(calculation.holdingCosts)} <small>(mortgage + taxes + insurance + other)</small>
+      <br><strong>Total Holding Costs:</strong> ${Utils.formatCurrency(calculation.holdingCosts)} <small>${holdingCostDescription}</small>
       <br><strong>Payback Period:</strong> ${calculation.paybackPeriod.toFixed(1)} years
     </div>`;
   }
