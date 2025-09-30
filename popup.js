@@ -936,7 +936,8 @@ class UIManager {
   }
   
   static showExportButton() {
-    if (typeof XLSX !== 'undefined') Utils.getElement("export-btn").style.display = "block";
+    // Export button is disabled - do not show
+    Utils.getElement("export-btn").style.display = "none";
   }
   
   static hideExportButton() {
@@ -1239,26 +1240,10 @@ class EventHandlers {
   static initializeExportButton() {
     const exportBtn = Utils.getElement('export-btn');
     
-    // Check if XLSX library is loaded
-    if (typeof XLSX === 'undefined') {
-      console.warn('🏠 XLSX library not available, hiding export button');
-      exportBtn.style.display = 'none';
-      return;
-    }
-    
-    exportBtn.addEventListener('click', async () => {
-      const calculation = appState.calculateResults();
-      if (calculation) {
-        try {
-          await ExcelExporter.export(calculation, appState.currentData, appState.currentStrategy);
-        } catch (error) {
-          console.error('🏠 Export error:', error);
-          alert('Error exporting to Excel. Please try again.');
-        }
-      } else {
-        alert('No calculation data available. Please calculate ROI first.');
-      }
-    });
+    // Export button is disabled - hide it
+    console.log('🏠 Export button disabled, hiding from UI');
+    exportBtn.style.display = 'none';
+    return;
   }
   
   static initializeFormInputs() {
